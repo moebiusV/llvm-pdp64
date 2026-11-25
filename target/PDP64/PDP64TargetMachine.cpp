@@ -83,7 +83,7 @@ public:
     return getTM<PDP64TargetMachine>();
   }
   void addIRPasses() override {
-    addPass(createAtomicExpandLegacyPass()); // atomics are library calls
+    addPass(createAtomicExpandLegacyPass()); // the operations that are not instructions become compare-and-swap loops
     addPass(createPDP64VecLoop());           // -pdp64-vecloop: innermost counted loops become one vec block
     TargetPassConfig::addIRPasses();
   }

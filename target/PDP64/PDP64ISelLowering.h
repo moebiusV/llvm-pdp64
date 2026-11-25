@@ -32,6 +32,10 @@ public:
     return MVT::i64;
   }
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
+  AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
+  // the 4-byte atomic words return the old value sign-extended and compare the low four bytes of the expected value, as the RISC-V ones do
+  ISD::NodeType getExtendForAtomicOps() const override { return ISD::SIGN_EXTEND; }
+  ISD::NodeType getExtendForAtomicCmpSwapArg() const override { return ISD::SIGN_EXTEND; }
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
                           SelectionDAG &DAG) const override;
   MachineBasicBlock *

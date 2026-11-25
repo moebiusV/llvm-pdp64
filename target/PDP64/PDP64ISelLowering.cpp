@@ -35,7 +35,13 @@ PDP64TargetLowering::PDP64TargetLowering(const TargetMachine &TM,
   setSchedulingPreference(Sched::Source);
   setMinFunctionAlignment(Align(2)); // instructions are parcels of 16 bits
   setPrefFunctionAlignment(Align(2));
-  setMaxAtomicSizeInBitsSupported(0); // atomics are library calls
+  // atomics (errata 211): the 4- and 8-byte read-modify-write words and the compare and swap are instructions; a byte or a half
+  // goes through a 4-byte compare and swap (LLVM's partword expansion), a subtract is an add of the negation, the other operations
+  // (nand, the floating-point ones, the wrapping increments) are a compare-and-swap loop (shouldExpandAtomicRMWInIR).  The machine
+  // is sequentially consistent: a fence is nothing, and an atomic load or store is an ordinary one.
+  setMaxAtomicSizeInBitsSupported(64);
+  setMinCmpXchgSizeInBits(32);
+  setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
 
   // extending loads: the loads of the machine extend, in both ways
   for (MVT VT : {MVT::i1, MVT::i8, MVT::i16, MVT::i32}) {
@@ -471,6 +477,7 @@ SDValue PDP64TargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const
   case ISD::ROTR: return LowerROT(Op, DAG);
   case ISD::BITCAST: return LowerBITCAST(Op, DAG);
   case ISD::VASTART: return LowerVASTART(Op, DAG);
+  case ISD::ATOMIC_FENCE: return Op.getOperand(0); // sequential consistency: no instruction
   default:
     llvm_unreachable("unimplemented operation");
   }
@@ -688,4 +695,27 @@ PDP64TargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
   if (Constraint.size() == 1 && Constraint[0] == 'r')
     return std::make_pair(0U, &PDP64::GPRRegClass);
   return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
+}
+
+// the read-modify-write operations the machine has as instructions (swap, add, and, or, xor, the signed and unsigned maximum and
+// minimum; sub is an add of the negation, made by the legalizer); the rest are a compare-and-swap loop
+TargetLowering::AtomicExpansionKind
+PDP64TargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
+  if (AI->getType()->getPrimitiveSizeInBits() < 32) // a byte or a half: LLVM's partword expansion on the 4-byte compare and swap
+    return AtomicExpansionKind::CmpXChg;
+  switch (AI->getOperation()) {
+  case AtomicRMWInst::Xchg:
+  case AtomicRMWInst::Add:
+  case AtomicRMWInst::Sub:
+  case AtomicRMWInst::And:
+  case AtomicRMWInst::Or:
+  case AtomicRMWInst::Xor:
+  case AtomicRMWInst::Max:
+  case AtomicRMWInst::Min:
+  case AtomicRMWInst::UMax:
+  case AtomicRMWInst::UMin:
+    return AtomicExpansionKind::None;
+  default:
+    return AtomicExpansionKind::CmpXChg;
+  }
 }
