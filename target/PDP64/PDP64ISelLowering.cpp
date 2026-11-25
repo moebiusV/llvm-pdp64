@@ -615,7 +615,7 @@ SDValue PDP64TargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
 SDValue PDP64TargetLowering::LowerROT(SDValue Op, SelectionDAG &DAG) const {
   if (auto *C = dyn_cast<ConstantSDNode>(Op.getOperand(1)))
     if (C->getZExtValue() < 64)
-      return Op; // rori / rol with an immediate
+      return Op; // ror / rol with an immediate
   return expandROT(Op.getNode(), /*AllowVectorOps=*/false, DAG);
 }
 

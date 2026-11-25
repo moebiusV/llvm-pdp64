@@ -35,7 +35,7 @@ def mask8  : ImmLeaf<i64, [{ return Imm == 0xff; }]>;
 def mask16 : ImmLeaf<i64, [{ return Imm == 0xffff; }]>;
 def mask32 : ImmLeaf<i64, [{ return Imm == 0xffffffff; }]>;
 
-// 64 - n for rol -> rori (the assembler takes both; used for rotr/rotl swaps)
+// 64 - n for rotl <-> rotr (used for rotr/rotl swaps)
 def NegShift : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant((64 - N->getZExtValue()) & 63, SDLoc(N), MVT::i64);
 }]>;
@@ -161,8 +161,8 @@ defm SHL : SHIFT<MN_shl, shl>;
 defm SHR : SHIFT<MN_shr, srl>;
 defm SAR : SHIFT<MN_sar, sra>;
 
-// rotates by a constant: rori rs, #n, rd ; rol is the assembler's spelling of 64-n
-def RORI : PI<(outs GPR:$rd), (ins GPR:$rs, imm64:$imm), !strconcat(MN_rori, " $rs, #$imm, $rd"),
+// rotates by a constant: ror rs, #n, rd (the same word as the register count; the assembler picks the form) and rol rs, #n, rd
+def RORI : PI<(outs GPR:$rd), (ins GPR:$rs, imm64:$imm), !strconcat(MN_ror, " $rs, #$imm, $rd"),
               [(set i64:$rd, (rotr i64:$rs, uimm6:$imm))]>;
 def ROLI : PI<(outs GPR:$rd), (ins GPR:$rs, imm64:$imm), !strconcat(MN_rol, " $rs, #$imm, $rd"),
               [(set i64:$rd, (rotl i64:$rs, uimm6:$imm))]>;
