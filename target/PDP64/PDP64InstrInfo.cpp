@@ -15,7 +15,7 @@ using namespace llvm;
 void PDP64InstrInfo::anchor() {}
 
 PDP64InstrInfo::PDP64InstrInfo(PDP64Subtarget &STI)
-    : PDP64GenInstrInfo(PDP64::ADJCALLSTACKDOWN, PDP64::ADJCALLSTACKUP), RI() {}
+    : PDP64GenInstrInfo(STI, RI, PDP64::ADJCALLSTACKDOWN, PDP64::ADJCALLSTACKUP), RI() {}
 
 void PDP64InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator I,
@@ -29,8 +29,7 @@ void PDP64InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
 
 void PDP64InstrInfo::storeRegToStackSlot(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register SrcReg,
-    bool isKill, int FI, const TargetRegisterClass *RC,
-    const TargetRegisterInfo *TRI, Register VReg,
+    bool isKill, int FI, const TargetRegisterClass *RC, Register VReg,
     MachineInstr::MIFlag Flags) const {
   DebugLoc DL;
   if (MI != MBB.end())
@@ -48,8 +47,8 @@ void PDP64InstrInfo::storeRegToStackSlot(
 
 void PDP64InstrInfo::loadRegFromStackSlot(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register DestReg,
-    int FI, const TargetRegisterClass *RC, const TargetRegisterInfo *TRI,
-    Register VReg, MachineInstr::MIFlag Flags) const {
+    int FI, const TargetRegisterClass *RC, Register VReg, unsigned SubReg,
+    MachineInstr::MIFlag Flags) const {
   DebugLoc DL;
   if (MI != MBB.end())
     DL = MI->getDebugLoc();

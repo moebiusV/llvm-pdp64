@@ -3,7 +3,7 @@
 #
 #   build.sh [-j N]       install.sh + configure + ninja; the result is $LLVM_BUILD/bin/llc (llc --version lists pdp64)
 #
-# LLVM_SRC (default ../llvm-project next to this repository, tag llvmorg-21.1.8) and LLVM_BUILD (default ../llvm-build) name the two trees.
+# LLVM_SRC (default ../llvm-project next to this repository, tag llvmorg-22.1.6) and LLVM_BUILD (default ../llvm-build) name the two trees.
 # The defaults are for a small machine (3 GB, 2 cores): one compile job, one link job, the BFD linker with --no-keep-memory,
 # assertions on (they catch an encoder that disagrees with the tables).  On a bigger machine:  build.sh -j 16  with
 # LLVM_USE_LINKER=lld, and add the targets you want (clang, llc ...) to TARGETS.
@@ -14,10 +14,10 @@ L=${LLVM_SRC:-$SIB/llvm-project}
 B=${LLVM_BUILD:-$SIB/llvm-build}
 J=1
 [ "${1:-}" = -j ] && J=$2
-[ -d "$L/.git" ] || git clone --depth 1 --branch llvmorg-21.1.8 https://github.com/llvm/llvm-project.git "$L"
+[ -d "$L/.git" ] || git clone --depth 1 --branch llvmorg-22.1.6 https://github.com/llvm/llvm-project.git "$L"
 "$here/install.sh" "$L"
 LINKER=${LLVM_USE_LINKER:-bfd}
-TARGETS=${TARGETS:-"llc llvm-tblgen llvm-mc llvm-objdump llvm-readobj llvm-objcopy"}
+TARGETS=${TARGETS:-"llc opt llvm-tblgen llvm-mc llvm-objdump llvm-readobj llvm-objcopy"}
 if [ ! -f "$B/build.ninja" ]; then
 	cmake -G Ninja -S "$L/llvm" -B "$B" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON \
 		-DLLVM_TARGETS_TO_BUILD="${LLVM_TARGETS:-}" -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=PDP64 \

@@ -16,7 +16,7 @@ The back end is for two things: to try different ways of vectorising and tiling 
 
     ../llvm-build/bin/llc -mtriple=pdp64-unknown-elf -O2 x.ll -o x.s      # llc --version lists pdp64
 
-`llvm/build.sh` needs LLVM 21.1.8 in `../llvm-project` and builds in `../llvm-build` (`LLVM_SRC`, `LLVM_BUILD`); on 12 cores `llc` takes about ten minutes with `-j 10`.
+`llvm/build.sh` needs LLVM 22.1.6 (OpenBSD's version; 21.1.8 also works, see `patch/`) in `../llvm-project` and builds in `../llvm-build` (`LLVM_SRC`, `LLVM_BUILD`); on 12 cores `llc` takes about ten minutes with `-j 10`.
 
 **`llvm/check.sh`** compiles every `llvm/tests/*.ll` (first line `; expect: N` or `; expect: fault` or `; expect: fault:REGEX`; lines `; llc: FLAGS` make variants, `; asm:`, `; asm-vec:` and `; noasm:` check the assembly) (`; expect: N` on the first line, `i32 @test()`), assembles with `as64`, links with `ld64` against the crt of `tools/pdp64test.sh` and `llvm/tests/lib/main.ll` (the driver that prints `test()`), runs `sim64` and compares. Then it takes the C programs of `tests/c/*.c` (and `tests/c-new/*.c`) through the host's `clang -S -emit-llvm -O1 -m64 -fno-builtin -ffreestanding -fno-stack-protector -mlong-double-64 -mno-sse -fno-vectorize` (triple, data layout and the x86 target attributes are dropped; `llc -mtriple=pdp64-unknown-elf` supplies its own) and `llc`, the same way. `tests/vec/*.c` are the vector kernels (`/* expect: N vec: K flags: CLANGFLAGS */`): each runs three ways, plain llc, `-pdp64-vecloop` and `-pdp64-vecloop -pdp64-vecloop-strip`, all must print N and the block count must be K (twice that for the strip form). `LLC_OPT` (default `-O2`) and `COPT` (clang, default `-O1`) choose the levels; the C results are reported and do not decide the exit status.
 

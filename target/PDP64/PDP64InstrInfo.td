@@ -470,3 +470,7 @@ def : Pat<(f32 (sint_to_fp i64:$x)), (f32 (FCVT_DS (f64 (FCVT_QD $x))))>;
 def : Pat<(f32 (uint_to_fp i64:$x)), (f32 (FCVT_DS (f64 (FCVT_QUD $x))))>;
 def : Pat<(i64 (fp_to_sint f32:$x)), (i64 (FCVT_DQ (f64 (FCVT_SD $x))))>;
 def : Pat<(i64 (fp_to_uint f32:$x)), (i64 (FCVT_DQU (f64 (FCVT_SD $x))))>;
+
+// LLVM 22 wants a target to say which register class the pointer operands of the generic pseudoinstructions
+// (LOAD_STACK_GUARD, PREALLOCATED_ARG, PATCHABLE_EVENT_CALL, ...) have; one class, as the pointers are 64-bit general registers
+defm : RemapAllTargetPseudoPointerOperands<GPR>;

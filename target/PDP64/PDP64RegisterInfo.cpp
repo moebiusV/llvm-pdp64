@@ -36,7 +36,7 @@ BitVector PDP64RegisterInfo::getReservedRegs(const MachineFunction &) const {
 }
 
 const TargetRegisterClass *
-PDP64RegisterInfo::getPointerRegClass(const MachineFunction &, unsigned) const {
+PDP64RegisterInfo::getPointerRegClass(unsigned) const {
   return &PDP64::GPRRegClass;
 }
 

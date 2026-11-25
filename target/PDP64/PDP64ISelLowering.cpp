@@ -23,7 +23,7 @@ using namespace llvm;
 
 PDP64TargetLowering::PDP64TargetLowering(const TargetMachine &TM,
                                          const PDP64Subtarget &STI)
-    : TargetLowering(TM), Subtarget(STI) {
+    : TargetLowering(TM, STI), Subtarget(STI) {
   addRegisterClass(MVT::i64, &PDP64::GPRRegClass);
   addRegisterClass(MVT::f64, &PDP64::GPRRegClass);
   addRegisterClass(MVT::f32, &PDP64::GPRRegClass);

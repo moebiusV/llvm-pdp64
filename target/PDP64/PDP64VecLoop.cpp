@@ -1772,6 +1772,39 @@ bool PDP64VecLoop::runOnFunction(Function &F) {
   return Changed;
 }
 
+// LLVM 22's InstCombine narrows a bitwise operation with a constant below a widening: it writes zext(xor x, -1) where LLVM 21 had xor(zext x, 255).
+// The analysis folds a widening into the load that feeds it and does not widen a value that was computed, so put the widening back above the
+// operation.  For and, or and xor this is exact (the constant is widened the same way: zext(x op k) == zext(x) op zext(k), and likewise for sext).
+static bool widenAboveBitwise(BasicBlock *H) {
+  SmallVector<CastInst *, 8> Work;
+  for (Instruction &I : *H)
+    if ((isa<ZExtInst>(&I) || isa<SExtInst>(&I)) && I.getType()->isVectorTy())
+      Work.push_back(cast<CastInst>(&I));
+  bool Changed = false;
+  for (CastInst *C : Work) {
+    auto *Bo = dyn_cast<BinaryOperator>(C->getOperand(0));
+    if (!Bo || Bo->getParent() != H) continue;
+    unsigned Op = Bo->getOpcode();
+    if (Op != Instruction::And && Op != Instruction::Or && Op != Instruction::Xor) continue;
+    Value *X = Bo->getOperand(0);
+    auto *K = dyn_cast<Constant>(Bo->getOperand(1));
+    if (!K) { K = dyn_cast<Constant>(Bo->getOperand(0)); X = Bo->getOperand(1); }
+    if (!K || isa<Constant>(X)) continue;
+    Value *W = nullptr;   // the widening of x that already exists: use it, so the analysis sees one widened value
+    for (User *U : X->users())
+      if (auto *Ex = dyn_cast<CastInst>(U))
+        if (Ex != C && Ex->getOpcode() == C->getOpcode() && Ex->getType() == C->getType() && Ex->getParent() == H && Ex->comesBefore(C)) { W = Ex; break; }
+    IRBuilder<> B(C);
+    if (!W) W = B.CreateCast(C->getOpcode(), X, C->getType());
+    Value *R = B.CreateBinOp(Bo->getOpcode(), W, B.CreateCast(C->getOpcode(), K, C->getType()));
+    C->replaceAllUsesWith(R);
+    C->eraseFromParent();
+    if (Bo->use_empty()) Bo->eraseFromParent();
+    Changed = true;
+  }
+  return Changed;
+}
+
 bool PDP64VecLoop::transform(Loop *L, ScalarEvolution &SE, LoopInfo &LI, DominatorTree &DT, Function &F) {
   const DataLayout &DL = F.getDataLayout();
   auto Say = [&](const Twine &W) {
@@ -1794,6 +1827,7 @@ bool PDP64VecLoop::transform(Loop *L, ScalarEvolution &SE, LoopInfo &LI, Dominat
     if (auto *St = dyn_cast<StoreInst>(&I)) if (St->getValueOperand()->getType()->isVectorTy()) IsVec = true;
   }
   if (IsVec ? !EnableVecBlock : !EnableVecLoop) return false;
+  if (IsVec) widenAboveBitwise(H);
   const SCEV *BTC = SE.getBackedgeTakenCount(L);
   if (!IsVec && isa<SCEVCouldNotCompute>(BTC)) {
     Say("the trip count is not computable");
@@ -2175,7 +2209,7 @@ bool PDP64VecLoop::transform(Loop *L, ScalarEvolution &SE, LoopInfo &LI, Dominat
   }
   // ---- the IR: the test, the block, the join
   IRBuilder<> B(P->getTerminator());
-  SCEVExpander Exp(SE, DL, "vecloop");
+  SCEVExpander Exp(SE, "vecloop");
   Type *I64 = Type::getInt64Ty(F.getContext());
   Instruction *IP = P->getTerminator();
   Value *TripV;

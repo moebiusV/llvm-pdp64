@@ -83,8 +83,8 @@ public:
                                OptimizationRemarkEmitter *ORE) const override;
 
   // ---- legality of memory operations: no masks, no gather, no scatter (the gather vldx was removed in wave 1, errata 170)
-  bool isLegalMaskedLoad(Type *, Align, unsigned) const override { return false; }
-  bool isLegalMaskedStore(Type *, Align, unsigned) const override { return false; }
+  bool isLegalMaskedLoad(Type *, Align, unsigned, TTI::MaskKind) const override { return false; }
+  bool isLegalMaskedStore(Type *, Align, unsigned, TTI::MaskKind) const override { return false; }
   bool isLegalMaskedGather(Type *, Align) const override { return false; }
   bool isLegalMaskedScatter(Type *, Align) const override { return false; }
   bool isLegalStridedLoadStore(Type *, Align) const override { return false; }
@@ -114,11 +114,8 @@ public:
                                   TTI::TargetCostKind CostKind,
                                   TTI::OperandValueInfo OpInfo = {TTI::OK_AnyValue, TTI::OP_None},
                                   const Instruction *I = nullptr) const override;
-  InstructionCost getMaskedMemoryOpCost(unsigned, Type *, Align, unsigned, TTI::TargetCostKind) const override {
-    return InstructionCost::getInvalid();
-  }
-  InstructionCost getGatherScatterOpCost(unsigned, Type *, const Value *, bool, Align, TTI::TargetCostKind,
-                                         const Instruction *) const override {
+  // LLVM 22 folded the masked, gather, scatter and strided cost hooks into one: none of them exists on this target
+  InstructionCost getMemIntrinsicInstrCost(const MemIntrinsicCostAttributes &, TTI::TargetCostKind) const override {
     return InstructionCost::getInvalid();
   }
   InstructionCost getInterleavedMemoryOpCost(unsigned Opcode, Type *VecTy, unsigned Factor,
