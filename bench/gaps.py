@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-gaps.py -- why LoopVectorize did or did not vectorise each loop of llvm/bench/gaps.c, and whether the lowering (PDP64VecLoop) turned the vector loop into a vec block.
+gaps.py -- why LoopVectorize did or did not vectorise each loop of bench/gaps.c, and whether the lowering (PDP64VecLoop) turned the vector loop into a vec block.
 
 For each g_* function: clang -O2 -Xclang -disable-llvm-passes -gline-tables-only, opt -passes='default<O2>' -mtriple=pdp64-unknown-elf with the loop vectoriser's remarks
 (missed, analysis, passed), and llc -pdp64-vecloop-verbose.  Prints a markdown table: function, LoopVectorize (vectorised at VF n / the reason it did not), lowering (a vec block / the reason
@@ -8,8 +8,9 @@ it left the vector loop scalarised).   gaps.py [--fast] (default: -ffast-math, a
 """
 import os, re, subprocess, sys, tempfile, argparse
 HERE = os.path.dirname(os.path.abspath(__file__))
-R = os.path.dirname(os.path.dirname(HERE))
-LB = os.path.join(os.path.dirname(R), 'llvm-build', 'bin')
+SIB = os.path.dirname(os.path.dirname(HERE))      # the directory the repositories sit in
+R = os.environ.get('PDP64', os.path.join(SIB, 'pdp64'))   # the pdp64 checkout
+LB = os.path.join(SIB, 'llvm-build', 'bin')
 def run(c, **k): return subprocess.run(c, capture_output=True, text=True, **k)
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--strict', action='store_true'); ap.add_argument('--csv'); a = ap.parse_args()

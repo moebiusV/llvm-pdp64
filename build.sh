@@ -1,15 +1,15 @@
 #!/bin/sh
 # Build the pdp64 back end (stage 1: the scalar code generator, llc) and the LLVM tools that go with it: llc, llvm-tblgen, llvm-mc, llvm-objdump, llvm-readobj, llvm-objcopy.
 #
-#   llvm/build.sh [-j N]       install.sh + configure + ninja; the result is $LLVM_BUILD/bin/llc (llc --version lists pdp64)
+#   build.sh [-j N]       install.sh + configure + ninja; the result is $LLVM_BUILD/bin/llc (llc --version lists pdp64)
 #
 # LLVM_SRC (default ../llvm-project next to this repository, tag llvmorg-21.1.8) and LLVM_BUILD (default ../llvm-build) name the two trees.
 # The defaults are for a small machine (3 GB, 2 cores): one compile job, one link job, the BFD linker with --no-keep-memory,
-# assertions on (they catch an encoder that disagrees with the tables).  On a bigger machine:  llvm/build.sh -j 16  with
+# assertions on (they catch an encoder that disagrees with the tables).  On a bigger machine:  build.sh -j 16  with
 # LLVM_USE_LINKER=lld, and add the targets you want (clang, llc ...) to TARGETS.
 set -e
 here=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
-SIB=$(dirname "$(dirname "$here")")
+SIB=$(dirname "$here")
 L=${LLVM_SRC:-$SIB/llvm-project}
 B=${LLVM_BUILD:-$SIB/llvm-build}
 J=1

@@ -4,10 +4,12 @@
 # directory to llvm/lib/Target/PDP64.  Idempotent.  The tree is a scratch clone; nothing here is committed to it.
 set -e
 here=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
-SIB=$(dirname "$(dirname "$here")")
+SIB=$(dirname "$here")
+P=${PDP64:-$SIB/pdp64}        # the pdp64 checkout: the grammar and the generator of the tables
 L=${1:-${LLVM_SRC:-$SIB/llvm-project}}
 [ -f "$L/llvm/lib/Target/CMakeLists.txt" ] || { echo "$L is not an LLVM source tree" >&2; exit 1; }
-"$here/../tools/gen-llvm-td.py" --check || { echo "llvm/target/PDP64/gen is stale: run tools/gen-llvm-td.py" >&2; exit 1; }
+[ -x "$P/tools/gen-llvm-td.py" ] || { echo "no pdp64 checkout at $P (set PDP64)" >&2; exit 1; }
+LLVM_PDP64="$here" "$P/tools/gen-llvm-td.py" --check || { echo "target/PDP64/gen is stale: run tools/gen-llvm-td.py in the pdp64 checkout" >&2; exit 1; }
 cd "$L"
 if git apply --reverse --check "$here/patch/llvm-core.patch" 2> /dev/null; then
 	echo "llvm-core.patch already applied"

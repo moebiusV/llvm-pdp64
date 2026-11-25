@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-bench.py -- the numbers of the comparison of the vectorising approaches (llvm/README.md, llvm/vector-usage.md).
+bench.py -- the numbers of the comparison of the vectorising approaches (README.md, vector-usage.md).
 
-For each kernel of docs/encoding-work/arch-data/vec-forms/{kernels.c,games,blas,seg} and llvm/bench/simple.c, and for each VARIANT (flags of llc), it
+For each kernel of docs/encoding-work/arch-data/vec-forms/{kernels.c,games,blas,seg} and bench/simple.c, and for each VARIANT (flags of llc), it
 compiles the kernel file with clang (-O2, the host's vectoriser off) and llc, links it with bench_main.c (compiled once with the scalar llc: its set-up loops are
 subtracted by running -DK_none), runs sim64 with -P and -V, and prints for each kernel and variant:
 
@@ -18,13 +18,14 @@ usage: bench.py [-k kernel,...] [-v variant,...] [--csv file] [--keep dir]
 import argparse, os, re, subprocess, sys, tempfile, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-R = os.path.dirname(os.path.dirname(HERE))
+SIB = os.path.dirname(os.path.dirname(HERE))      # the directory the repositories sit in
+R = os.environ.get('PDP64', os.path.join(SIB, 'pdp64'))   # the pdp64 checkout
 B = os.path.join(R, 'build')
-LLC = os.path.join(os.path.dirname(R), 'llvm-build', 'bin', 'llc')
+LLC = os.path.join(SIB, 'llvm-build', 'bin', 'llc')
 VF = os.path.join(R, 'docs', 'encoding-work', 'arch-data', 'vec-forms')
 SRCS = [os.path.join(VF, 'kernels.c'), os.path.join(VF, 'games', 'games.c'), os.path.join(VF, 'blas', 'blas.c'),
         os.path.join(VF, 'seg', 'seg.c'), os.path.join(HERE, 'simple.c'), os.path.join(HERE, 'newk.c')]
-OPT = os.path.join(os.path.dirname(R), 'llvm-build', 'bin', 'opt')
+OPT = os.path.join(SIB, 'llvm-build', 'bin', 'opt')
 # a variant is the flags of llc; 'lv' is a different middle end: clang without any LLVM pass, opt -O2 with the pdp64 target (LoopVectorize with its cost
 # model), then llc (PDP64VecLoop lowers the vector loops to vec blocks); 'lv0' is the same with the lowering off (-pdp64-vecblock=0: what the vectoriser
 # made, legalised to scalar code, as the correctness fallback); 'lvpf' is lv with SLP and the loop vectoriser's report written to <kernel file>.remarks

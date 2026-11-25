@@ -1,11 +1,11 @@
 #!/bin/sh
 #
-# check.sh -- the tests of the LLVM back end: compile each llvm/tests/*.ll with llc, assemble with as64, link with ld64 against the same tiny crt as
+# check.sh -- the tests of the LLVM back end: compile each tests/*.ll with llc, assemble with as64, link with ld64 against the same tiny crt as
 # tools/pdp64test.sh, run under sim64 and compare the printed value of test() with the `; expect: N` of the first line.  Then the C programs of
 # tests/c/*.c (first line `/* expect: N ... */`) go through clang -S -emit-llvm (the host's clang; target-independent flags, triple and data layout
 # dropped) and llc the same way; the C results are reported, they do not decide the exit status.
 #
-# usage: llvm/check.sh [-v] [--no-c] [--c-only] [--host] [test.ll ...]
+# usage: check.sh [-v] [--no-c] [--c-only] [--host] [test.ll ...]
 #   -v        show the failing output, keep nothing else
 #   --no-c    only the .ll tests;  --c-only  only the C programs
 #   a file.c argument: that vector kernel test only (tests/vec/NAME.c)
@@ -16,10 +16,12 @@
 #
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
-R=$(dirname "$here")
+SIB=$(dirname "$here")
+R=${PDP64:-$SIB/pdp64}        # the pdp64 checkout: the tools, build/, and the C test programs
+[ -d "$R/tools" ] || { echo "no pdp64 checkout at $R (set PDP64)" >&2; exit 2; }
 B=$R/build
-LLC=${LLC:-$(dirname "$R")/llvm-build/bin/llc}
-OPT=${OPT:-$(dirname "$R")/llvm-build/bin/opt}
+LLC=${LLC:-$SIB/llvm-build/bin/llc}
+OPT=${OPT:-$SIB/llvm-build/bin/opt}
 LLC_OPT=${LLC_OPT:--O2}
 CLANG=${CLANG:-clang}
 verbose=0; doll=1; doc=1; host=0; files=
@@ -38,8 +40,8 @@ cfiles=; llfiles=
 for f in $files; do case $f in *.c) cfiles="$cfiles $f";; *) llfiles="$llfiles $f";; esac; done
 files=$llfiles
 if [ -n "$cfiles" ]; then doc=0; [ -z "$llfiles" ] && doll=0; fi
-"$R/tools/gen-llvm-td.py" --check || echo "warning: llvm/target/PDP64/gen is stale (tools/gen-llvm-td.py)" >&2
-[ -x "$LLC" ] || { echo "no llc at $LLC (llvm/build.sh)" >&2; exit 2; }
+LLVM_PDP64="$here" "$R/tools/gen-llvm-td.py" --check || echo "warning: target/PDP64/gen is stale (run tools/gen-llvm-td.py in the pdp64 checkout)" >&2
+[ -x "$LLC" ] || { echo "no llc at $LLC (build.sh)" >&2; exit 2; }
 for t in as64 ld64 sim64; do [ -x "$B/$t" ] || { echo "no $B/$t" >&2; exit 2; }; done
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
