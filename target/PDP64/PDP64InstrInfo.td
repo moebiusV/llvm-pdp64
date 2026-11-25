@@ -273,7 +273,7 @@ defm STB  : ST<MN_movb,  truncstorei8, i64>;
 //===----------------------------------------------------------------------===//
 // Atomics (errata 211): "op rd, rs, (ra)", three registers, no offset; the bare name is 8 bytes and the name with an l after the
 // operation is 4 bytes.  Rd gets the old value (4 bytes: sign-extended).  The machine is sequentially consistent, so every
-// ordering of LLVM's is the same instruction and the db forms are not needed; an atomic load or store is an ordinary one.
+// ordering of LLVM's is the same instruction; an atomic load or store is an ordinary one.
 //===----------------------------------------------------------------------===//
 
 multiclass AMO<string mn64, string mn32, SDPatternOperator op64, SDPatternOperator op32> {
