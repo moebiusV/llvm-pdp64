@@ -271,35 +271,35 @@ defm STW  : ST<MN_movw,  truncstorei16, i64>;
 defm STB  : ST<MN_movb,  truncstorei8, i64>;
 
 //===----------------------------------------------------------------------===//
-// Atomics (errata 211): "op rd, rs, (ra)", three registers, no offset; the bare name is 8 bytes and the name with an l after the
+// Atomics (errata 211): "op rs, (ra), rd", three registers, no offset, the destination last; the bare name is 8 bytes and the name with an l after the
 // operation is 4 bytes.  Rd gets the old value (4 bytes: sign-extended).  The machine is sequentially consistent, so every
 // ordering of LLVM's is the same instruction; an atomic load or store is an ordinary one.
 //===----------------------------------------------------------------------===//
 
 multiclass AMO<string mn64, string mn32, SDPatternOperator op64, SDPatternOperator op32> {
   let mayLoad = 1, mayStore = 1, hasSideEffects = 1 in {
-  def _Q : PI<(outs GPR:$rd), (ins GPR:$rs, GPR:$ra), !strconcat(mn64, " $rd, $rs, ($ra)"),
+  def _Q : PI<(outs GPR:$rd), (ins GPR:$rs, GPR:$ra), !strconcat(mn64, " $rs, ($ra), $rd"),
               [(set i64:$rd, (op64 i64:$ra, i64:$rs))]>;
-  def _L : PI<(outs GPR:$rd), (ins GPR:$rs, GPR:$ra), !strconcat(mn32, " $rd, $rs, ($ra)"),
+  def _L : PI<(outs GPR:$rd), (ins GPR:$rs, GPR:$ra), !strconcat(mn32, " $rs, ($ra), $rd"),
               [(set i64:$rd, (op32 i64:$ra, i64:$rs))]>;
   }
 }
 defm AMOSWAP : AMO<MN_swap, MN_swapl, atomic_swap_i64, atomic_swap_i32>;
-defm AMOADD  : AMO<MN_xadd, MN_xaddl, atomic_load_add_i64, atomic_load_add_i32>;
-defm AMOAND  : AMO<MN_xand, MN_xandl, atomic_load_and_i64, atomic_load_and_i32>;
-defm AMOOR   : AMO<MN_xor_, MN_xor_l, atomic_load_or_i64, atomic_load_or_i32>;
-defm AMOXOR  : AMO<MN_xxor, MN_xxorl, atomic_load_xor_i64, atomic_load_xor_i32>;
-defm AMOMAX  : AMO<MN_xmax, MN_xmaxl, atomic_load_max_i64, atomic_load_max_i32>;
-defm AMOMIN  : AMO<MN_xmin, MN_xminl, atomic_load_min_i64, atomic_load_min_i32>;
-defm AMOMAXU : AMO<MN_xmaxu, MN_xmaxul, atomic_load_umax_i64, atomic_load_umax_i32>;
-defm AMOMINU : AMO<MN_xminu, MN_xminul, atomic_load_umin_i64, atomic_load_umin_i32>;
+defm AMOADD  : AMO<MN_aadd, MN_aaddl, atomic_load_add_i64, atomic_load_add_i32>;
+defm AMOAND  : AMO<MN_aand, MN_aandl, atomic_load_and_i64, atomic_load_and_i32>;
+defm AMOOR   : AMO<MN_abis, MN_abisl, atomic_load_or_i64, atomic_load_or_i32>;
+defm AMOXOR  : AMO<MN_axor, MN_axorl, atomic_load_xor_i64, atomic_load_xor_i32>;
+defm AMOMAX  : AMO<MN_amax, MN_amaxl, atomic_load_max_i64, atomic_load_max_i32>;
+defm AMOMIN  : AMO<MN_amin, MN_aminl, atomic_load_min_i64, atomic_load_min_i32>;
+defm AMOMAXU : AMO<MN_amaxu, MN_amaxul, atomic_load_umax_i64, atomic_load_umax_i32>;
+defm AMOMINU : AMO<MN_aminu, MN_aminul, atomic_load_umin_i64, atomic_load_umin_i32>;
 
 // compare and swap: the expected value and the old value are one register (Rd), so the instruction ties its result to the
 // expected value
 let mayLoad = 1, mayStore = 1, hasSideEffects = 1, Constraints = "$rd = $rx" in {
-def AMOCAS_Q : PI<(outs GPR:$rd), (ins GPR:$rx, GPR:$rn, GPR:$ra), !strconcat(MN_cas, " $rd, $rn, ($ra)"),
+def AMOCAS_Q : PI<(outs GPR:$rd), (ins GPR:$rx, GPR:$rn, GPR:$ra), !strconcat(MN_cas, " $rn, ($ra), $rd"),
                   [(set i64:$rd, (atomic_cmp_swap_i64 i64:$ra, i64:$rx, i64:$rn))]>;
-def AMOCAS_L : PI<(outs GPR:$rd), (ins GPR:$rx, GPR:$rn, GPR:$ra), !strconcat(MN_casl, " $rd, $rn, ($ra)"),
+def AMOCAS_L : PI<(outs GPR:$rd), (ins GPR:$rx, GPR:$rn, GPR:$ra), !strconcat(MN_casl, " $rn, ($ra), $rd"),
                   [(set i64:$rd, (atomic_cmp_swap_i32 i64:$ra, i64:$rx, i64:$rn))]>;
 }
 
