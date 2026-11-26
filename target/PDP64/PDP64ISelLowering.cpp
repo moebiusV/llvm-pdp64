@@ -73,6 +73,10 @@ PDP64TargetLowering::PDP64TargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::SETCC, VT, Custom);
   }
 
+  // smin, smax, umin, umax: the assembler's sequence (setCC, neg, bsel), with no branch; abs is expanded by LLVM from them
+  for (unsigned Op : {ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX})
+    setOperationAction(Op, MVT::i64, Custom);
+
   // integer arithmetic
   setOperationAction(ISD::SDIVREM, MVT::i64, Expand);
   setOperationAction(ISD::UDIVREM, MVT::i64, Expand);
@@ -134,6 +138,7 @@ const char *PDP64TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case PDP64ISD::BR_CC: return "PDP64ISD::BR_CC";
   case PDP64ISD::SELECT_CC: return "PDP64ISD::SELECT_CC";
   case PDP64ISD::SETCC: return "PDP64ISD::SETCC";
+  case PDP64ISD::BSEL: return "PDP64ISD::BSEL";
   case PDP64ISD::FSETCC: return "PDP64ISD::FSETCC";
   case PDP64ISD::F32_TO_I64: return "PDP64ISD::F32_TO_I64";
   case PDP64ISD::I64_TO_F32: return "PDP64ISD::I64_TO_F32";
@@ -474,6 +479,7 @@ SDValue PDP64TargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const
   case ISD::BR_CC: return LowerBR_CC(Op, DAG);
   case ISD::SELECT_CC: return LowerSELECT_CC(Op, DAG);
   case ISD::SETCC: return LowerSETCC(Op, DAG);
+  case ISD::SMIN: case ISD::SMAX: case ISD::UMIN: case ISD::UMAX: return LowerMINMAX(Op, DAG);
   case ISD::ROTL:
   case ISD::ROTR: return LowerROT(Op, DAG);
   case ISD::BITCAST: return LowerBITCAST(Op, DAG);
@@ -659,6 +665,18 @@ SDValue PDP64TargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const
 }
 
 // a comparison used as a value: one setCC for integers; for floating point a branch over a constant (the custom inserter of SETF_*)
+// smin, smax, umin, umax on i64: setCC into a register, negate the one or zero into a mask of all ones or zero, and bsel takes the first operand where the
+// mask is ones and the second where it is zeros: the sequence of the assembler's min, max, minu and maxu.  No branch, so the time does not depend on the values.
+SDValue PDP64TargetLowering::LowerMINMAX(SDValue Op, SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  EVT VT = Op.getValueType();
+  SDValue A = Op.getOperand(0), B = Op.getOperand(1);
+  ISD::CondCode CC = Op.getOpcode() == ISD::SMIN ? ISD::SETLT : Op.getOpcode() == ISD::SMAX ? ISD::SETGT : Op.getOpcode() == ISD::UMIN ? ISD::SETULT : ISD::SETUGT;
+  SDValue T = DAG.getNode(PDP64ISD::SETCC, DL, VT, A, B, DAG.getTargetConstant(intCC(CC), DL, MVT::i64));
+  SDValue M = DAG.getNode(ISD::SUB, DL, VT, DAG.getConstant(0, DL, VT), T);
+  return DAG.getNode(PDP64ISD::BSEL, DL, VT, M, A, B);
+}
+
 SDValue PDP64TargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
   SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(2))->get();

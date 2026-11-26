@@ -16,6 +16,7 @@ enum NodeType : unsigned {
   BR_CC,        // chain, lhs, rhs, cc (PDP64CC), dest
   SELECT_CC,    // lhs, rhs, cc, true, false
   SETCC,        // lhs, rhs, cc (integer): 1 or 0 (setCC)
+  BSEL,         // mask, a, b: (mask & a) | (~mask & b) (bsel)
   FSETCC,       // lhs, rhs, cc (floating point): 1 or 0 (a branch over a constant)
   F32_TO_I64,   // the bits of a binary32 as the sign-extended register value
   I64_TO_F32,
@@ -91,6 +92,7 @@ private:
   SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSETCC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerMINMAX(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerROT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBITCAST(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;

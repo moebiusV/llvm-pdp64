@@ -209,10 +209,6 @@ defm DIVU : RegR3<MN_divu, udiv>;
 defm MOD : RegR3<MN_mod, srem>;
 defm MODU : RegR3<MN_modu, urem>;
 defm MULHU : RegR3<MN_mulhu, mulhu, 1>;
-defm MIN : RegR3<MN_min, smin, 1>;
-defm MINU : RegR3<MN_minu, umin, 1>;
-defm MAX : RegR3<MN_max, smax, 1>;
-defm MAXU : RegR3<MN_maxu, umax, 1>;
 
 // bit counting: "op rs, rd" (the count of zero is 64)
 multiclass RegR2<string mn, SDPatternOperator op> {
@@ -410,6 +406,11 @@ def FCB_S : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst), "fcb${cc}3
 def SDT_PDP64SetCC : SDTypeProfile<1, 3, [SDTCisVT<0, i64>, SDTCisSameAs<1, 2>, SDTCisVT<3, i64>]>;
 def pdp64setcc : SDNode<"PDP64ISD::SETCC", SDT_PDP64SetCC>;
 def simm8 : ImmLeaf<i64, [{ return isInt<8>(Imm); }]>;
+// bitwise select: bsel rm, ra, rb, rd is rd = (rm & ra) | (~rm & rb); smin, smax, umin and umax are a setCC, a negate and this
+def SDT_PDP64BSel : SDTypeProfile<1, 3, [SDTCisVT<0, i64>, SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>]>;
+def pdp64bsel : SDNode<"PDP64ISD::BSEL", SDT_PDP64BSel>;
+def BSEL : PI<(outs GPR:$rd), (ins GPR:$m, GPR:$a, GPR:$b), !strconcat(MN_bsel, " $m, $a, $b, $rd"),
+              [(set i64:$rd, (pdp64bsel i64:$m, i64:$a, i64:$b))]>;
 def SET_rr : PI<(outs GPR:$rd), (ins GPR:$a, GPR:$b, ccop:$cc), "set${cc} $a, $b, $rd",
                 [(set i64:$rd, (pdp64setcc i64:$a, i64:$b, (i64 timm:$cc)))]>;
 def SET_ri : PI<(outs GPR:$rd), (ins GPR:$a, imm64:$i, ccop:$cc), "set${cc} $a, #$i, $rd",

@@ -1,4 +1,4 @@
-; expect: -2147483618  -- smin, smax, umin, umax, abs on i64 and i32; the min and max instructions of the rare group
+; expect: -2147483618  -- smin, smax, umin, umax, abs on i64 and i32; each of the four is a setCC, a negate and a bsel (no branch), abs is the sign-mask idiom
 declare i64 @llvm.smin.i64(i64, i64)
 declare i64 @llvm.smax.i64(i64, i64)
 declare i64 @llvm.umin.i64(i64, i64)
