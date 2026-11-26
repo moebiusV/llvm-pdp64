@@ -161,11 +161,11 @@ defm SHL : SHIFT<MN_shl, shl>;
 defm SHR : SHIFT<MN_shr, srl>;
 defm SAR : SHIFT<MN_sar, sra>;
 
-// rotates by a constant: ror rs, #n, rd (the same word as the register count; the assembler picks the form) and rol rs, #n, rd
+// rotates by a constant: ror rs, #n, rd (the same word as the register count; the assembler picks the form, two bytes when rd is rs and the count is -8 to 7 mod 64).  A rotate left is
+// a rotate right by 64 - n: the machine has the one rotate, and rol is only an assembler spelling of it
 def RORI : PI<(outs GPR:$rd), (ins GPR:$rs, imm64:$imm), !strconcat(MN_ror, " $rs, #$imm, $rd"),
               [(set i64:$rd, (rotr i64:$rs, uimm6:$imm))]>;
-def ROLI : PI<(outs GPR:$rd), (ins GPR:$rs, imm64:$imm), !strconcat(MN_rol, " $rs, #$imm, $rd"),
-              [(set i64:$rd, (rotl i64:$rs, uimm6:$imm))]>;
+def : Pat<(rotl i64:$rs, uimm6:$imm), (RORI $rs, (NegShift imm:$imm))>;
 
 // one-register operations (in place)
 let Constraints = "$rd = $rs" in {

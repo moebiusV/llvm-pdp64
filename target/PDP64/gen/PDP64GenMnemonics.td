@@ -222,7 +222,6 @@ defvar MN_push = "push";
 defvar MN_pushm = "pushm";
 defvar MN_pushx = "pushx";
 defvar MN_ret = "ret";
-defvar MN_rol = "rol";
 defvar MN_ror = "ror";
 defvar MN_ror32 = "ror32";
 defvar MN_rti = "rti";
