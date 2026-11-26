@@ -35,7 +35,7 @@ inline unsigned pdp64CheckKindOfUbsan(unsigned H) {
 } // namespace llvm
 
 // Condition codes.  The integer ones are the cbCC suffixes of the grammar
-// (generated list); the floating-point ones are conditions of the language
+// (generated list), then the four that only the flag branches have; the floating-point ones are conditions of the language
 // that the custom inserter turns into fcmp + b<cc> (flags after fcmp: N a<b,
 // Z a==b, V unordered, C clear).
 namespace PDP64CC {
@@ -43,6 +43,7 @@ enum CondCode : unsigned {
 #define X(c) COND_##c,
   PDP64_CB_CONDS(X)
 #undef X
+  COND_mi, COND_pl, COND_vc, COND_vs,     // only the flag branches b<cc> have them (cbCC has not): after an fcmp
   FP_OEQ, FP_UNE, FP_OGT, FP_OGE, FP_OLT, FP_OLE,
   FP_ULT, FP_ULE, FP_UGT, FP_UGE, FP_ORD, FP_UNO,
   COND_INVALID
@@ -53,6 +54,7 @@ inline const char *getCondName(unsigned CC) {
 #define X(c) #c,
       PDP64_CB_CONDS(X)
 #undef X
+      "mi", "pl", "vc", "vs",
   };
   return CC < sizeof(Names) / sizeof(Names[0]) ? Names[CC] : "??";
 }

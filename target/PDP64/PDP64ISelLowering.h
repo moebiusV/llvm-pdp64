@@ -27,6 +27,11 @@ public:
   explicit PDP64TargetLowering(const TargetMachine &TM, const PDP64Subtarget &STI);
 
   const char *getTargetNodeName(unsigned Opcode) const override;
+  /// A plain load or store works at any address (the architecture's guarantee): nothing is split into byte accesses.
+  bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AddrSpace, Align Alignment, MachineMemOperand::Flags Flags, unsigned *Fast) const override {
+    if (Fast) *Fast = 1;
+    return true;
+  }
   EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                          EVT VT) const override {
     return MVT::i64;

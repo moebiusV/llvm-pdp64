@@ -10,4 +10,4 @@ defvar PcDispBits = 32;
 defvar CtImmBits = 12;
 defvar PushImmBits = 32;
 defvar IdxScales = [1, 2, 4, 8];
-defvar CondNames = ["cc", "cs", "eq", "ge", "gt", "hi", "le", "los", "lt", "mi", "ne", "pl", "vc", "vs"];
+defvar CondNames = ["cc", "cs", "eq", "ge", "gt", "hi", "le", "los", "lt", "ne"];
