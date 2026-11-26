@@ -1,5 +1,5 @@
 ; expect: -790429932  -- a packed struct: fields of 32, 64 and 16 bits at odd offsets are plain loads and stores, one instruction each (no byte accesses: a plain access works at any address)
-; noasm: movb
+; noasm: \)\.u?8
 %P = type <{ i8, i32, i64, i16 }>
 @g = global %P <{ i8 1, i32 16909060, i64 1234605616436508552, i16 2571 }>, align 1
 define i32 @test() {

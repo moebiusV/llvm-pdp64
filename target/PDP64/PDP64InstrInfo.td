@@ -102,15 +102,15 @@ class PI<dag outs, dag ins, string asmstr, list<dag> pattern = []> : Instruction
 //===----------------------------------------------------------------------===//
 
 let isMoveReg = 1 in {
-def MOVrr  : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_movq, " $rs, $rd")>;
-def MOVrrA : PI<(outs GPRALL:$rd), (ins GPRALL:$rs), !strconcat(MN_movq, " $rs, $rd")>;
+def MOVrr  : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_mov, " $rs, $rd")>;
+def MOVrrA : PI<(outs GPRALL:$rd), (ins GPRALL:$rs), !strconcat(MN_mov, " $rs, $rd")>;
 }
 
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
-def MOVI : PI<(outs GPR:$rd), (ins imm64:$i), !strconcat(MN_movq, " #$i, $rd"),
+def MOVI : PI<(outs GPR:$rd), (ins imm64:$i), !strconcat(MN_mov, " #$i, $rd"),
               [(set i64:$rd, simm32:$i)]>;
 // a 64-bit constant from the literal pool (as64 makes the pool)
-def MOVK : PI<(outs GPR:$rd), (ins imm64:$i), !strconcat(MN_movq, " =$i, $rd"),
+def MOVK : PI<(outs GPR:$rd), (ins imm64:$i), !strconcat(MN_mov, " =$i, $rd"),
               [(set i64:$rd, bigimm:$i)]>;
 def CLR  : PI<(outs GPR:$rd), (ins), !strconcat(MN_clr, " $rd"), [(set i64:$rd, 0)]>;
 }
@@ -184,18 +184,18 @@ def MULH : PI<(outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2), !strconcat(MN_mulh, " $r
 }
 
 // extensions and the masks that are extensions
-def SEXTB : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_movb, " $rs, $rd"),
+def SEXTB : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_mov, " $rs.8, $rd"),
                [(set i64:$rd, (sext_inreg i64:$rs, i8))]>;
-def SEXTW : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_movw, " $rs, $rd"),
+def SEXTW : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_mov, " $rs.16, $rd"),
                [(set i64:$rd, (sext_inreg i64:$rs, i16))]>;
-def SEXTL : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_movl, " $rs, $rd"),
+def SEXTL : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_mov, " $rs.32, $rd"),
                [(set i64:$rd, (sext_inreg i64:$rs, i32))]>;
 let AddedComplexity = 10 in {
-def ZEXTB : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_movzb, " $rs, $rd"),
+def ZEXTB : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_mov, " $rs.u8, $rd"),
                [(set i64:$rd, (and i64:$rs, mask8))]>;
-def ZEXTW : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_movzw, " $rs, $rd"),
+def ZEXTW : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_mov, " $rs.u16, $rd"),
                [(set i64:$rd, (and i64:$rs, mask16))]>;
-def ZEXTL : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_movzl, " $rs, $rd"),
+def ZEXTL : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(MN_mov, " $rs.u32, $rd"),
                [(set i64:$rd, (and i64:$rs, mask32))]>;
 }
 
@@ -225,46 +225,47 @@ defm BITREV : RegR2<MN_bitrev, bitreverse>;
 // Loads and stores: d(rN), d(rN)(rX*s), symbol (pc-relative)
 //===----------------------------------------------------------------------===//
 
-multiclass LD<string mn, SDPatternOperator ld, ValueType vt> {
-  def _R : PI<(outs GPR:$rd), (ins GPR:$b, disp:$d), !strconcat(mn, " $d($b), $rd"),
+// m is the width mark of the memory operand (".8", ".u16", "" for 64 bits): the assembler picks movb, movzw ... from it
+multiclass LD<string mn, string m, SDPatternOperator ld, ValueType vt> {
+  def _R : PI<(outs GPR:$rd), (ins GPR:$b, disp:$d), !strconcat(mn, " $d($b)", m, ", $rd"),
               [(set vt:$rd, (ld (addrri i64:$b, simm28:$d)))]> { let mayLoad = 1; }
   def _X : PI<(outs GPR:$rd), (ins GPR:$b, disp:$d, GPR:$i, scale:$s),
-              !strconcat(mn, " $d($b)($i*$s), $rd"),
+              !strconcat(mn, " $d($b)($i*$s)", m, ", $rd"),
               [(set vt:$rd, (ld (addrrx i64:$b, simm28:$d, i64:$i, scaleimm:$s)))]> { let mayLoad = 1; }
-  def _S : PI<(outs GPR:$rd), (ins symop:$g), !strconcat(mn, " $g, $rd"),
+  def _S : PI<(outs GPR:$rd), (ins symop:$g), !strconcat(mn, " $g", m, ", $rd"),
               [(set vt:$rd, (ld (pdp64wrap tglobaladdr:$g)))]> { let mayLoad = 1; }
 }
-multiclass ST<string mn, SDPatternOperator st, ValueType vt> {
-  def _R : PI<(outs), (ins GPR:$rs, GPR:$b, disp:$d), !strconcat(mn, " $rs, $d($b)"),
+multiclass ST<string mn, string m, SDPatternOperator st, ValueType vt> {
+  def _R : PI<(outs), (ins GPR:$rs, GPR:$b, disp:$d), !strconcat(mn, " $rs, $d($b)", m),
               [(st vt:$rs, (addrri i64:$b, simm28:$d))]> { let mayStore = 1; }
   def _X : PI<(outs), (ins GPR:$rs, GPR:$b, disp:$d, GPR:$i, scale:$s),
-              !strconcat(mn, " $rs, $d($b)($i*$s)"),
+              !strconcat(mn, " $rs, $d($b)($i*$s)", m),
               [(st vt:$rs, (addrrx i64:$b, simm28:$d, i64:$i, scaleimm:$s))]> { let mayStore = 1; }
-  def _S : PI<(outs), (ins GPR:$rs, symop:$g), !strconcat(mn, " $rs, $g"),
+  def _S : PI<(outs), (ins GPR:$rs, symop:$g), !strconcat(mn, " $rs, $g", m),
               [(st vt:$rs, (pdp64wrap tglobaladdr:$g))]> { let mayStore = 1; }
 }
 // a load with no extension pattern of its own: a sign-extending load serves the
 // any-extending one (a value narrower than 64 bits is kept extended in a register)
-defm LDQ  : LD<MN_movq,  load, i64>;
-defm LDFD : LD<MN_movq,  load, f64>;
-defm LDFS : LD<MN_movl,  load, f32>;       // movl: sign-extends, as a binary32 is kept
-defm LDL  : LD<MN_movl,  sextloadi32, i64>;
-defm LDLA : LD<MN_movl,  extloadi32, i64>;
-defm LDW  : LD<MN_movw,  sextloadi16, i64>;
-defm LDWA : LD<MN_movw,  extloadi16, i64>;
-defm LDB  : LD<MN_movb,  sextloadi8, i64>;
-defm LDBA : LD<MN_movb,  extloadi8, i64>;
-defm LDZL : LD<MN_movzl, zextloadi32, i64>;
-defm LDZW : LD<MN_movzw, zextloadi16, i64>;
-defm LDZB : LD<MN_movzb, zextloadi8, i64>;
-defm LDZ1 : LD<MN_movzb, zextloadi1, i64>;
-defm LDA1 : LD<MN_movzb, extloadi1, i64>;
-defm STQ  : ST<MN_movq,  store, i64>;
-defm STFD : ST<MN_movq,  store, f64>;
-defm STFS : ST<MN_movl,  store, f32>;
-defm STL  : ST<MN_movl,  truncstorei32, i64>;
-defm STW  : ST<MN_movw,  truncstorei16, i64>;
-defm STB  : ST<MN_movb,  truncstorei8, i64>;
+defm LDQ  : LD<MN_mov, "",  load, i64>;
+defm LDFD : LD<MN_mov, "",  load, f64>;
+defm LDFS : LD<MN_mov, ".32",  load, f32>;       // movl: sign-extends, as a binary32 is kept
+defm LDL  : LD<MN_mov, ".32",  sextloadi32, i64>;
+defm LDLA : LD<MN_mov, ".32",  extloadi32, i64>;
+defm LDW  : LD<MN_mov, ".16",  sextloadi16, i64>;
+defm LDWA : LD<MN_mov, ".16",  extloadi16, i64>;
+defm LDB  : LD<MN_mov, ".8",  sextloadi8, i64>;
+defm LDBA : LD<MN_mov, ".8",  extloadi8, i64>;
+defm LDZL : LD<MN_mov, ".u32", zextloadi32, i64>;
+defm LDZW : LD<MN_mov, ".u16", zextloadi16, i64>;
+defm LDZB : LD<MN_mov, ".u8", zextloadi8, i64>;
+defm LDZ1 : LD<MN_mov, ".u8", zextloadi1, i64>;
+defm LDA1 : LD<MN_mov, ".u8", extloadi1, i64>;
+defm STQ  : ST<MN_mov, "",  store, i64>;
+defm STFD : ST<MN_mov, "",  store, f64>;
+defm STFS : ST<MN_mov, ".32",  store, f32>;
+defm STL  : ST<MN_mov, ".32",  truncstorei32, i64>;
+defm STW  : ST<MN_mov, ".16",  truncstorei16, i64>;
+defm STB  : ST<MN_mov, ".8",  truncstorei8, i64>;
 
 //===----------------------------------------------------------------------===//
 // Atomics (errata 211): "op rs, (ra), rd", three registers, no offset, the destination last; the bare name is 8 bytes and the name with an l after the
@@ -272,30 +273,30 @@ defm STB  : ST<MN_movb,  truncstorei8, i64>;
 // ordering of LLVM's is the same instruction; an atomic load or store is an ordinary one.
 //===----------------------------------------------------------------------===//
 
-multiclass AMO<string mn64, string mn32, SDPatternOperator op64, SDPatternOperator op32> {
+multiclass AMO<string mn, SDPatternOperator op64, SDPatternOperator op32> {
   let mayLoad = 1, mayStore = 1, hasSideEffects = 1 in {
-  def _Q : PI<(outs GPR:$rd), (ins GPR:$rs, GPR:$ra), !strconcat(mn64, " $rs, ($ra), $rd"),
+  def _Q : PI<(outs GPR:$rd), (ins GPR:$rs, GPR:$ra), !strconcat(mn, " $rs, ($ra), $rd"),
               [(set i64:$rd, (op64 i64:$ra, i64:$rs))]>;
-  def _L : PI<(outs GPR:$rd), (ins GPR:$rs, GPR:$ra), !strconcat(mn32, " $rs, ($ra), $rd"),
+  def _L : PI<(outs GPR:$rd), (ins GPR:$rs, GPR:$ra), !strconcat(mn, " $rs, ($ra).32, $rd"),
               [(set i64:$rd, (op32 i64:$ra, i64:$rs))]>;
   }
 }
-defm AMOSWAP : AMO<MN_swap, MN_swapl, atomic_swap_i64, atomic_swap_i32>;
-defm AMOADD  : AMO<MN_aadd, MN_aaddl, atomic_load_add_i64, atomic_load_add_i32>;
-defm AMOAND  : AMO<MN_aand, MN_aandl, atomic_load_and_i64, atomic_load_and_i32>;
-defm AMOOR   : AMO<MN_abis, MN_abisl, atomic_load_or_i64, atomic_load_or_i32>;
-defm AMOXOR  : AMO<MN_axor, MN_axorl, atomic_load_xor_i64, atomic_load_xor_i32>;
-defm AMOMAX  : AMO<MN_amax, MN_amaxl, atomic_load_max_i64, atomic_load_max_i32>;
-defm AMOMIN  : AMO<MN_amin, MN_aminl, atomic_load_min_i64, atomic_load_min_i32>;
-defm AMOMAXU : AMO<MN_amaxu, MN_amaxul, atomic_load_umax_i64, atomic_load_umax_i32>;
-defm AMOMINU : AMO<MN_aminu, MN_aminul, atomic_load_umin_i64, atomic_load_umin_i32>;
+defm AMOSWAP : AMO<MN_swap, atomic_swap_i64, atomic_swap_i32>;
+defm AMOADD  : AMO<MN_aadd, atomic_load_add_i64, atomic_load_add_i32>;
+defm AMOAND  : AMO<MN_aand, atomic_load_and_i64, atomic_load_and_i32>;
+defm AMOOR   : AMO<MN_abis, atomic_load_or_i64, atomic_load_or_i32>;
+defm AMOXOR  : AMO<MN_axor, atomic_load_xor_i64, atomic_load_xor_i32>;
+defm AMOMAX  : AMO<MN_amax, atomic_load_max_i64, atomic_load_max_i32>;
+defm AMOMIN  : AMO<MN_amin, atomic_load_min_i64, atomic_load_min_i32>;
+defm AMOMAXU : AMO<MN_amaxu, atomic_load_umax_i64, atomic_load_umax_i32>;
+defm AMOMINU : AMO<MN_aminu, atomic_load_umin_i64, atomic_load_umin_i32>;
 
 // compare and swap: the expected value and the old value are one register (Rd), so the instruction ties its result to the
 // expected value
 let mayLoad = 1, mayStore = 1, hasSideEffects = 1, Constraints = "$rd = $rx" in {
 def AMOCAS_Q : PI<(outs GPR:$rd), (ins GPR:$rx, GPR:$rn, GPR:$ra), !strconcat(MN_cas, " $rn, ($ra), $rd"),
                   [(set i64:$rd, (atomic_cmp_swap_i64 i64:$ra, i64:$rx, i64:$rn))]>;
-def AMOCAS_L : PI<(outs GPR:$rd), (ins GPR:$rx, GPR:$rn, GPR:$ra), !strconcat(MN_casl, " $rn, ($ra), $rd"),
+def AMOCAS_L : PI<(outs GPR:$rd), (ins GPR:$rx, GPR:$rn, GPR:$ra), !strconcat(MN_cas, " $rn, ($ra).32, $rd"),
                   [(set i64:$rd, (atomic_cmp_swap_i32 i64:$ra, i64:$rx, i64:$rn))]>;
 }
 
@@ -315,29 +316,29 @@ def : Pat<(atomic_store_8 i64:$rs, (addrri i64:$b, simm28:$d)), (STB_R $rs, $b, 
 // post-increment and pre-decrement: "mn (rN)+, rd" loads and then adds the size
 // of the access to rN, "mn -(rN), rd" subtracts it first.  Selected in C++
 // (tryIndexed in PDP64ISelDAGToDAG.cpp): the size is the size of the access.
-multiclass IDXLD<string mn> {
+multiclass IDXLD<string mn, string m> {
   let Constraints = "$wb = $base", mayLoad = 1 in {
-    def _PI : PI<(outs GPR:$rd, GPR:$wb), (ins GPR:$base), !strconcat(mn, " ($base)+, $rd")>;
-    def _PD : PI<(outs GPR:$rd, GPR:$wb), (ins GPR:$base), !strconcat(mn, " -($base), $rd")>;
+    def _PI : PI<(outs GPR:$rd, GPR:$wb), (ins GPR:$base), !strconcat(mn, " ($base)+", m, ", $rd")>;
+    def _PD : PI<(outs GPR:$rd, GPR:$wb), (ins GPR:$base), !strconcat(mn, " -($base)", m, ", $rd")>;
   }
 }
-multiclass IDXST<string mn> {
+multiclass IDXST<string mn, string m> {
   let Constraints = "$wb = $base", mayStore = 1 in {
-    def _PI : PI<(outs GPR:$wb), (ins GPR:$rs, GPR:$base), !strconcat(mn, " $rs, ($base)+")>;
-    def _PD : PI<(outs GPR:$wb), (ins GPR:$rs, GPR:$base), !strconcat(mn, " $rs, -($base)")>;
+    def _PI : PI<(outs GPR:$wb), (ins GPR:$rs, GPR:$base), !strconcat(mn, " $rs, ($base)+", m)>;
+    def _PD : PI<(outs GPR:$wb), (ins GPR:$rs, GPR:$base), !strconcat(mn, " $rs, -($base)", m)>;
   }
 }
-defm LDQX  : IDXLD<MN_movq>;
-defm LDLX  : IDXLD<MN_movl>;
-defm LDWX  : IDXLD<MN_movw>;
-defm LDBX  : IDXLD<MN_movb>;
-defm LDZLX : IDXLD<MN_movzl>;
-defm LDZWX : IDXLD<MN_movzw>;
-defm LDZBX : IDXLD<MN_movzb>;
-defm STQX  : IDXST<MN_movq>;
-defm STLX  : IDXST<MN_movl>;
-defm STWX  : IDXST<MN_movw>;
-defm STBX  : IDXST<MN_movb>;
+defm LDQX  : IDXLD<MN_mov, "">;
+defm LDLX  : IDXLD<MN_mov, ".32">;
+defm LDWX  : IDXLD<MN_mov, ".16">;
+defm LDBX  : IDXLD<MN_mov, ".8">;
+defm LDZLX : IDXLD<MN_mov, ".u32">;
+defm LDZWX : IDXLD<MN_mov, ".u16">;
+defm LDZBX : IDXLD<MN_mov, ".u8">;
+defm STQX  : IDXST<MN_mov, "">;
+defm STLX  : IDXST<MN_mov, ".32">;
+defm STWX  : IDXST<MN_mov, ".16">;
+defm STBX  : IDXST<MN_mov, ".8">;
 
 // lea: three-address add of a displacement, a scaled index, a symbol
 def LEA_R : PI<(outs GPR:$rd), (ins GPR:$b, disp:$d), !strconcat(MN_lea, " $d($b), $rd")>;
@@ -362,9 +363,9 @@ def ADDSP : PI<(outs), (ins imm64:$i), !strconcat(MN_add, " #$i, sp")>;
 def SUBSP : PI<(outs), (ins imm64:$i), !strconcat(MN_sub, " #$i, sp")>;
 }
 let Defs = [R14], Uses = [R14, R13] in
-def FPTOSP : PI<(outs), (ins), !strconcat(MN_movq, " fp, sp")>;
+def FPTOSP : PI<(outs), (ins), !strconcat(MN_mov, " fp, sp")>;
 let Defs = [R13], Uses = [R14] in
-def SPTOFP : PI<(outs), (ins), !strconcat(MN_movq, " sp, fp")>;
+def SPTOFP : PI<(outs), (ins), !strconcat(MN_mov, " sp, fp")>;
 let Defs = [R14], Uses = [R14], mayStore = 1 in
 def PUSHFP : PI<(outs), (ins), !strconcat(MN_push, " fp")>;
 let Defs = [R14, R13], Uses = [R14], mayLoad = 1 in
@@ -396,7 +397,7 @@ def CB_ri : PI<(outs), (ins GPR:$a, imm64:$i, ccop:$cc, brtarget:$dst),
 let isBranch = 1, isTerminator = 1 in {
 def FCB_D : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst), "fcb${cc} $a, $b, $dst",
                [(pdp64brcc f64:$a, f64:$b, (i64 timm:$cc), bb:$dst)]>;
-def FCB_S : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst), "fcb${cc}32 $a, $b, $dst",
+def FCB_S : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst), "fcb${cc} $a.32, $b.32, $dst",
                [(pdp64brcc f32:$a, f32:$b, (i64 timm:$cc), bb:$dst)]>;
 }
 }
@@ -496,34 +497,36 @@ def NOP : PI<(outs), (ins), MN_nop>;
 // sign-extended.  "op rs, rd" is rd = rd op rs.
 //===----------------------------------------------------------------------===//
 
-multiclass FALU<string mn, ValueType vt, SDPatternOperator op, bit comm = 0> {
+// m is the mark of the registers: ".32" for binary32, "" for binary64
+multiclass FALU<string mn, string m, ValueType vt, SDPatternOperator op, bit comm = 0> {
   let Constraints = "$rd = $rs1" in
-  def NAME : PI<(outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2), !strconcat(mn, " $rs2, $rd"),
+  def NAME : PI<(outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2), !strconcat(mn, " $rs2", m, ", $rd", m),
                 [(set vt:$rd, (op vt:$rs1, vt:$rs2))]> { let isCommutable = comm; }
 }
-defm FADD_D : FALU<MN_fadd, f64, fadd, 1>;
-defm FSUB_D : FALU<MN_fsub, f64, fsub>;
-defm FMUL_D : FALU<MN_fmul, f64, fmul, 1>;
-defm FDIV_D : FALU<MN_fdiv, f64, fdiv>;
-defm FADD_S : FALU<MN_fadd32, f32, fadd, 1>;
-defm FSUB_S : FALU<MN_fsub32, f32, fsub>;
-defm FMUL_S : FALU<MN_fmul32, f32, fmul, 1>;
-defm FDIV_S : FALU<MN_fdiv32, f32, fdiv>;
+defm FADD_D : FALU<MN_fadd, "", f64, fadd, 1>;
+defm FSUB_D : FALU<MN_fsub, "", f64, fsub>;
+defm FMUL_D : FALU<MN_fmul, "", f64, fmul, 1>;
+defm FDIV_D : FALU<MN_fdiv, "", f64, fdiv>;
+defm FADD_S : FALU<MN_fadd, ".32", f32, fadd, 1>;
+defm FSUB_S : FALU<MN_fsub, ".32", f32, fsub>;
+defm FMUL_S : FALU<MN_fmul, ".32", f32, fmul, 1>;
+defm FDIV_S : FALU<MN_fdiv, ".32", f32, fdiv>;
 
-multiclass FUN<string mn, ValueType dt, ValueType st, SDPatternOperator op> {
-  def NAME : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(mn, " $rs, $rd"),
+// ms and md are the marks of the source and the destination register
+multiclass FUN<string mn, string ms, string md, ValueType dt, ValueType st, SDPatternOperator op> {
+  def NAME : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(mn, " $rs", ms, ", $rd", md),
                 [(set dt:$rd, (op st:$rs))]>;
 }
-defm FSQRT_D : FUN<MN_fsqrt, f64, f64, fsqrt>;
-defm FSQRT_S : FUN<MN_fsqrt32, f32, f32, fsqrt>;
-defm FNEG_D  : FUN<MN_fneg, f64, f64, fneg>;
-defm FABS_D  : FUN<MN_fabs, f64, f64, fabs>;
-defm FCVT_SD : FUN<MN_fcvtsd, f64, f32, fpextend>;
-defm FCVT_DS : FUN<MN_fcvtds, f32, f64, fpround>;
-defm FCVT_QD : FUN<MN_fcvtqd, f64, i64, sint_to_fp>;
-defm FCVT_DQ : FUN<MN_fcvtdq, i64, f64, fp_to_sint>;
-defm FCVT_QUD : FUN<MN_fcvtqud, f64, i64, uint_to_fp>;
-defm FCVT_DQU : FUN<MN_fcvtdqu, i64, f64, fp_to_uint>;
+defm FSQRT_D : FUN<MN_fsqrt, "", "", f64, f64, fsqrt>;
+defm FSQRT_S : FUN<MN_fsqrt, ".32", ".32", f32, f32, fsqrt>;
+defm FNEG_D : FUN<MN_fneg, "", "", f64, f64, fneg>;
+defm FABS_D : FUN<MN_fabs, "", "", f64, f64, fabs>;
+defm FCVT_SD : FUN<MN_fcvt, ".32", ".64", f64, f32, fpextend>;
+defm FCVT_DS : FUN<MN_fcvt, ".64", ".32", f32, f64, fpround>;
+defm FCVT_QD : FUN<MN_fcvt, "", ".64", f64, i64, sint_to_fp>;
+defm FCVT_DQ : FUN<MN_fcvt, ".64", "", i64, f64, fp_to_sint>;
+defm FCVT_QUD : FUN<MN_fcvt, ".u64", ".64", f64, i64, uint_to_fp>;
+defm FCVT_DQU : FUN<MN_fcvt, ".64", ".u64", i64, f64, fp_to_uint>;
 
 // binary32 negate and absolute value on the sign-extended bits
 def : Pat<(f32 (fneg f32:$a)), (f32 (XORri $a, -2147483648))>;
