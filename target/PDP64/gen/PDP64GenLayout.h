@@ -33,16 +33,7 @@ constexpr unsigned Hot4[16] = {0, 1, 8, 2, 14, 3, 9, 10, 11, 4, 15, 5, 24, 25, 2
 
 // the ones that also exist as b<cc> (cmp + branch on the flags)
 #define PDP64_B_CONDS(X) \
-  X(cc) \
-  X(cs) \
-  X(eq) \
-  X(ge) \
-  X(gt) \
-  X(hi) \
-  X(le) \
-  X(los) \
-  X(lt) \
-  X(ne)
+
 
 // the conditions of ctCC rs, rb (trap if rs CC rb)
 #define PDP64_CT_CONDS(X) \

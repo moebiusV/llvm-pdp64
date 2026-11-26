@@ -62,10 +62,10 @@ void PDP64InstrInfo::loadRegFromStackSlot(
       .addMemOperand(MMO);
 }
 
-// Branches: BR dst ; CB_rr/CB_ri a, b|i, cc, dst.  The floating-point branches
-// (BFLAG after an fcmp) are not analysed.
+// Branches: BR dst ; CB_rr/CB_ri a, b|i, cc, dst ; FCB_D/FCB_S a, b, cc, dst (floating point; the negation of every floating-point
+// condition is exact, PDP64CC::fpInvert, so the branches are analysed and reversed like the integer ones).
 static bool isCondBranch(unsigned Opc) {
-  return Opc == PDP64::CB_rr || Opc == PDP64::CB_ri;
+  return Opc == PDP64::CB_rr || Opc == PDP64::CB_ri || Opc == PDP64::FCB_D || Opc == PDP64::FCB_S;
 }
 
 bool PDP64InstrInfo::analyzeBranch(MachineBasicBlock &MBB,
@@ -163,6 +163,21 @@ bool PDP64InstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
   assert(Cond.size() == 4 && "bad condition");
   auto CC = static_cast<PDP64CC::CondCode>(Cond[3].getImm());
+  if (PDP64CC::isFPCond(CC)) {
+    bool Swap;
+    PDP64CC::CondCode Inv = PDP64CC::fpInvert(CC, Swap);
+    if (Inv == PDP64CC::COND_INVALID)
+      return true;
+    if (Swap) {
+      MachineOperand A = Cond[1], B = Cond[2];
+      A.setIsKill(false);
+      B.setIsKill(false);
+      Cond[1] = B;
+      Cond[2] = A;
+    }
+    Cond[3].setImm(Inv);
+    return false;
+  }
   PDP64CC::CondCode Inv = PDP64CC::invert(CC);
   if (Inv == PDP64CC::COND_INVALID)
     return true;

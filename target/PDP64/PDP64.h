@@ -34,18 +34,21 @@ inline unsigned pdp64CheckKindOfUbsan(unsigned H) {
 }
 } // namespace llvm
 
-// Condition codes.  The integer ones are the cbCC suffixes of the grammar
-// (generated list), then the four that only the flag branches have; the floating-point ones are conditions of the language
-// that the custom inserter turns into fcmp + b<cc> (flags after fcmp: N a<b,
-// Z a==b, V unordered, C clear).
+// Condition codes.  The integer ones are the cbCC / setCC suffixes of the grammar (generated list).  The floating-point ones name a
+// floating-point compare-and-branch (fcbCC a, b, L: eq ne lt le uo or) or a pair of them; the machine has no flags and no "not less than":
+//   FCC_EQ FCC_NE FCC_LT FCC_LE FCC_UO FCC_OR   one instruction, fcb<cc> (fcb<cc>32 for binary32)
+//   FCC_ULT  a<b or unordered       fcbuo a,b,L ; fcblt a,b,L
+//   FCC_ULE  a<=b or unordered      fcbuo a,b,L ; fcble a,b,L
+//   FCC_UEQ  a==b or unordered      fcbuo a,b,L ; fcbeq a,b,L
+//   FCC_ONE  a<b or a>b (ordered)   fcblt a,b,L ; fcblt b,a,L
+// (a > b is a < b with the operands swapped by the lowering).  The set is closed under negation, see fpInvert.
 namespace PDP64CC {
 enum CondCode : unsigned {
 #define X(c) COND_##c,
   PDP64_CB_CONDS(X)
 #undef X
-  COND_mi, COND_pl, COND_vc, COND_vs,     // only the flag branches b<cc> have them (cbCC has not): after an fcmp
-  FP_OEQ, FP_UNE, FP_OGT, FP_OGE, FP_OLT, FP_OLE,
-  FP_ULT, FP_ULE, FP_UGT, FP_UGE, FP_ORD, FP_UNO,
+  FCC_EQ, FCC_NE, FCC_LT, FCC_LE, FCC_UO, FCC_OR,
+  FCC_ULT, FCC_ULE, FCC_UEQ, FCC_ONE,
   COND_INVALID
 };
 
@@ -54,9 +57,21 @@ inline const char *getCondName(unsigned CC) {
 #define X(c) #c,
       PDP64_CB_CONDS(X)
 #undef X
-      "mi", "pl", "vc", "vs",
+      "eq", "ne", "lt", "le", "uo", "or",
+      "ult", "ule", "ueq", "one",
   };
   return CC < sizeof(Names) / sizeof(Names[0]) ? Names[CC] : "??";
+}
+
+inline bool isFPCond(unsigned CC) { return CC >= FCC_EQ && CC <= FCC_ONE; }
+
+// The immediate of cbCC: 16 bits signed (CbImmBits) for eq, ne and the unsigned conditions with any register; the signed lt, le, gt, ge
+// have the 16-bit immediate only with a hot register (4-bit register field) and 12 bits otherwise (found by trying as64: cblt r17, #2048 is
+// an error).  The register allocator does not know which registers are hot, so the compiler uses the 12 bits for those four.
+inline bool cbImmFits(unsigned CC, int64_t V) {
+  if (CC == COND_lt || CC == COND_le || CC == COND_gt || CC == COND_ge)
+    return V >= -2048 && V <= 2047;
+  return V >= -(int64_t(1) << (PDP64Layout::CbImmBits - 1)) && V < (int64_t(1) << (PDP64Layout::CbImmBits - 1));
 }
 
 // the inverse of an integer condition
@@ -76,29 +91,23 @@ inline CondCode invert(CondCode CC) {
   }
 }
 
-// After fcmp x, y: N is x<y, Z is x==y, V is unordered, C is clear.  The signed
-// branches then are:  bgt = x>y (false when unordered), bge = x>=y (false),
-// blt = x<y or unordered, ble = x<=y or unordered.  Each floating-point
-// condition is one compare (maybe with the operands swapped) and one branch.
-struct FPSeq {
-  bool Swap;
-  unsigned Branch; // a cc name of the b<cc> instructions
-};
-inline FPSeq fpSequence(unsigned CC) {
+// The exact negation of a floating-point condition (NaN included): the new condition, and whether the operands are swapped.
+//   !(a == b) = a != b      !(a < b)  = b <= a or unordered      !(a <= b) = b < a or unordered
+//   !(a < b or uo) = b <= a     !(a <= b or uo) = b < a     !(a == b or uo) = a < b or a > b
+inline CondCode fpInvert(CondCode CC, bool &Swap) {
+  Swap = false;
   switch (CC) {
-  case FP_OEQ: return {false, COND_eq};
-  case FP_UNE: return {false, COND_ne};
-  case FP_OGT: return {false, COND_gt};
-  case FP_OGE: return {false, COND_ge};
-  case FP_OLT: return {true, COND_gt};
-  case FP_OLE: return {true, COND_ge};
-  case FP_ULT: return {false, COND_lt};
-  case FP_ULE: return {false, COND_le};
-  case FP_UGT: return {true, COND_lt};
-  case FP_UGE: return {true, COND_le};
-  case FP_ORD: return {false, COND_vc};
-  case FP_UNO: return {false, COND_vs};
-  default: return {false, COND_INVALID};
+  case FCC_EQ: return FCC_NE;
+  case FCC_NE: return FCC_EQ;
+  case FCC_UO: return FCC_OR;
+  case FCC_OR: return FCC_UO;
+  case FCC_UEQ: return FCC_ONE;
+  case FCC_ONE: return FCC_UEQ;
+  case FCC_LT: Swap = true; return FCC_ULE;
+  case FCC_LE: Swap = true; return FCC_ULT;
+  case FCC_ULT: Swap = true; return FCC_LE;
+  case FCC_ULE: Swap = true; return FCC_LT;
+  default: return COND_INVALID;
   }
 }
 } // namespace PDP64CC

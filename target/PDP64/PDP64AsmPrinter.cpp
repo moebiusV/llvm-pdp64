@@ -105,24 +105,29 @@ void PDP64AsmPrinter::emitInstruction(const MachineInstr *MI) {
   PDP64_MC::verifyInstructionPredicates(MI->getOpcode(),
                                         getSubtargetInfo().getFeatureBits());
   unsigned Opc = MI->getOpcode();
-  if (Opc == PDP64::FBR_D || Opc == PDP64::FBR_S) {
-    // fcmp x, y ; b<cc> dst  (see PDP64CC::fpSequence)
-    PDP64CC::FPSeq S = PDP64CC::fpSequence(MI->getOperand(2).getImm());
+  if (Opc == PDP64::FCB_D || Opc == PDP64::FCB_S) {
+    // fcbCC a, b, dst: eq ne lt le uo or are one instruction; the others two (see PDP64.h)
+    unsigned CC = MI->getOperand(2).getImm();
     MCOperand A = MCOperand::createReg(MI->getOperand(0).getReg());
     MCOperand B = MCOperand::createReg(MI->getOperand(1).getReg());
-    if (S.Swap)
-      std::swap(A, B);
-    MCInst Cmp;
-    Cmp.setOpcode(Opc == PDP64::FBR_S ? PDP64::FCMP_S : PDP64::FCMP_D);
-    Cmp.addOperand(A);
-    Cmp.addOperand(B);
-    EmitToStreamer(*OutStreamer, Cmp);
-    MCInst Br;
-    Br.setOpcode(PDP64::BFLAG);
-    Br.addOperand(MCOperand::createImm(S.Branch));
-    Br.addOperand(MCOperand::createExpr(
-        MCSymbolRefExpr::create(MI->getOperand(3).getMBB()->getSymbol(), OutContext)));
-    EmitToStreamer(*OutStreamer, Br);
+    MCOperand Dst = MCOperand::createExpr(
+        MCSymbolRefExpr::create(MI->getOperand(3).getMBB()->getSymbol(), OutContext));
+    auto emit = [&](unsigned C, MCOperand X, MCOperand Y) {
+      MCInst I;
+      I.setOpcode(Opc);
+      I.addOperand(X);
+      I.addOperand(Y);
+      I.addOperand(MCOperand::createImm(C));
+      I.addOperand(Dst);
+      EmitToStreamer(*OutStreamer, I);
+    };
+    switch (CC) {
+    case PDP64CC::FCC_ULT: emit(PDP64CC::FCC_UO, A, B); emit(PDP64CC::FCC_LT, A, B); break;
+    case PDP64CC::FCC_ULE: emit(PDP64CC::FCC_UO, A, B); emit(PDP64CC::FCC_LE, A, B); break;
+    case PDP64CC::FCC_UEQ: emit(PDP64CC::FCC_UO, A, B); emit(PDP64CC::FCC_EQ, A, B); break;
+    case PDP64CC::FCC_ONE: emit(PDP64CC::FCC_LT, A, B); emit(PDP64CC::FCC_LT, B, A); break;
+    default: emit(CC, A, B); break;
+    }
     return;
   }
   switch (Opc) {

@@ -95,6 +95,8 @@ run_one() {
 		got=$(timeout 20 "$B/sim64" "$tmp/$n.x" 2> "$tmp/$n.err")
 		if [ "$got" != "$want" ]; then why="got '$got' want '$want'"; return 1; fi;;
 	esac
+	# the machine has no flags: no output of the back end may contain a flag instruction (cmp tst bit adc sbc set fcmp fcmp32 and the b<cc> flag branches)
+	if grep -Eq '^[[:space:]]+(cmp|tst|bit|adc|sbc|set|fcmp|fcmp32|bne|beq|bpl|bmi|bvc|bvs|bcc|bcs|bge|blt|bgt|ble|bhi|blos|bhis|blo)[[:space:]]' "$tmp/$n.s"; then why="the assembly has a flag instruction: $(grep -E -m1 '^[[:space:]]+(cmp|tst|bit|adc|sbc|set|fcmp|fcmp32|bne|beq|bpl|bmi|bvc|bvs|bcc|bcs|bge|blt|bgt|ble|bhi|blos|bhis|blo)[[:space:]]' "$tmp/$n.s")"; return 1; fi
 	# `; asm: REGEX` / `; noasm: REGEX` lines of the test: the assembly must / must not match (egrep)
 	if [ -n "$ll" ]; then
 		sed -n 's/^; asm: //p' "$ll" | while IFS= read -r pat; do grep -Eq -- "$pat" "$tmp/$n.s" || { echo "asm lacks: $pat" > "$tmp/$n.asm"; }; done

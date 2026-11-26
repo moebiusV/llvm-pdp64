@@ -102,7 +102,6 @@ PDP64TargetLowering::PDP64TargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::FMA, VT, Expand);
     setOperationAction(ISD::FCOPYSIGN, VT, Expand);
     setOperationAction(ISD::FREM, VT, Expand);
-    setCondCodeAction({ISD::SETONE, ISD::SETUEQ}, VT, Expand);
   }
   setOperationAction(ISD::FP_TO_SINT, MVT::i64, Legal);
   setOperationAction(ISD::FP_TO_UINT, MVT::i64, Legal);
@@ -134,6 +133,8 @@ const char *PDP64TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case PDP64ISD::WRAPPER: return "PDP64ISD::WRAPPER";
   case PDP64ISD::BR_CC: return "PDP64ISD::BR_CC";
   case PDP64ISD::SELECT_CC: return "PDP64ISD::SELECT_CC";
+  case PDP64ISD::SETCC: return "PDP64ISD::SETCC";
+  case PDP64ISD::FSETCC: return "PDP64ISD::FSETCC";
   case PDP64ISD::F32_TO_I64: return "PDP64ISD::F32_TO_I64";
   case PDP64ISD::I64_TO_F32: return "PDP64ISD::I64_TO_F32";
   }
@@ -551,21 +552,26 @@ static PDP64CC::CondCode intCC(ISD::CondCode CC) {
   }
 }
 
-static PDP64CC::CondCode fpCC(ISD::CondCode CC) {
+// A floating-point condition as the machine's: the PDP64CC condition, and whether the operands are swapped (a > b is b < a).  Every
+// predicate of LLVM is one of ten, none needs a "not less than" (see PDP64.h).
+static PDP64CC::CondCode fpCC(ISD::CondCode CC, bool &Swap) {
+  Swap = false;
   switch (CC) {
-  case ISD::SETEQ: case ISD::SETOEQ: return PDP64CC::FP_OEQ;
-  case ISD::SETNE: case ISD::SETUNE: return PDP64CC::FP_UNE;
-  case ISD::SETGT: case ISD::SETOGT: return PDP64CC::FP_OGT;
-  case ISD::SETGE: case ISD::SETOGE: return PDP64CC::FP_OGE;
-  case ISD::SETLT: case ISD::SETOLT: return PDP64CC::FP_OLT;
-  case ISD::SETLE: case ISD::SETOLE: return PDP64CC::FP_OLE;
-  case ISD::SETULT: return PDP64CC::FP_ULT;
-  case ISD::SETULE: return PDP64CC::FP_ULE;
-  case ISD::SETUGT: return PDP64CC::FP_UGT;
-  case ISD::SETUGE: return PDP64CC::FP_UGE;
-  case ISD::SETO: return PDP64CC::FP_ORD;
-  case ISD::SETUO: return PDP64CC::FP_UNO;
-  default: llvm_unreachable("condition not expanded");
+  case ISD::SETEQ: case ISD::SETOEQ: return PDP64CC::FCC_EQ;
+  case ISD::SETNE: case ISD::SETUNE: return PDP64CC::FCC_NE;
+  case ISD::SETLT: case ISD::SETOLT: return PDP64CC::FCC_LT;
+  case ISD::SETLE: case ISD::SETOLE: return PDP64CC::FCC_LE;
+  case ISD::SETGT: case ISD::SETOGT: Swap = true; return PDP64CC::FCC_LT;
+  case ISD::SETGE: case ISD::SETOGE: Swap = true; return PDP64CC::FCC_LE;
+  case ISD::SETULT: return PDP64CC::FCC_ULT;
+  case ISD::SETULE: return PDP64CC::FCC_ULE;
+  case ISD::SETUGT: Swap = true; return PDP64CC::FCC_ULT;
+  case ISD::SETUGE: Swap = true; return PDP64CC::FCC_ULE;
+  case ISD::SETUEQ: return PDP64CC::FCC_UEQ;
+  case ISD::SETONE: return PDP64CC::FCC_ONE;
+  case ISD::SETO: return PDP64CC::FCC_OR;
+  case ISD::SETUO: return PDP64CC::FCC_UO;
+  default: llvm_unreachable("not a floating-point condition");
   }
 }
 
@@ -577,15 +583,58 @@ static void normalizeCmp(SDValue &LHS, SDValue &RHS, ISD::CondCode &CC) {
   }
 }
 
+// the condition and operands of a compare node, integer or floating point
+static unsigned compareCC(SDValue &LHS, SDValue &RHS, ISD::CondCode CC) {
+  if (LHS.getValueType().isFloatingPoint()) {
+    bool Swap;
+    unsigned PC = fpCC(CC, Swap);
+    if (Swap)
+      std::swap(LHS, RHS);
+    return PC;
+  }
+  return intCC(CC);
+}
+
 SDValue PDP64TargetLowering::LowerBR_CC(SDValue Op, SelectionDAG &DAG) const {
   SDValue Chain = Op.getOperand(0);
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(1))->get();
   SDValue LHS = Op.getOperand(2), RHS = Op.getOperand(3), Dest = Op.getOperand(4);
   SDLoc DL(Op);
   normalizeCmp(LHS, RHS, CC);
-  unsigned PC = LHS.getValueType().isFloatingPoint() ? fpCC(CC) : intCC(CC);
+  unsigned PC = compareCC(LHS, RHS, CC);
   return DAG.getNode(PDP64ISD::BR_CC, DL, MVT::Other, Chain, LHS, RHS,
                      DAG.getTargetConstant(PC, DL, MVT::i64), Dest);
+}
+
+// an integer compare as a value: one setCC (rd = 1 or 0).  A constant just out of the signed 8-bit range may be in range with the neighbouring
+// condition (x < 128 is x <= 127; the unsigned ones when nothing wraps); otherwise it goes into a register.
+static SDValue makeIntSetCC(SelectionDAG &DAG, const SDLoc &DL, EVT VT, SDValue LHS, SDValue RHS, ISD::CondCode CC) {
+  normalizeCmp(LHS, RHS, CC);
+  if (auto *C = dyn_cast<ConstantSDNode>(RHS)) {
+    int64_t V = C->getSExtValue();
+    if (!isInt<8>(V)) {
+      uint64_t U = C->getZExtValue();
+      int64_t NV = 0;
+      ISD::CondCode NC = CC;
+      bool Ok = true;
+      switch (CC) {
+      case ISD::SETLT: NC = ISD::SETLE; NV = V - 1; Ok = V != INT64_MIN; break;
+      case ISD::SETGE: NC = ISD::SETGT; NV = V - 1; Ok = V != INT64_MIN; break;
+      case ISD::SETLE: NC = ISD::SETLT; NV = V + 1; Ok = V != INT64_MAX; break;
+      case ISD::SETGT: NC = ISD::SETGE; NV = V + 1; Ok = V != INT64_MAX; break;
+      case ISD::SETULT: NC = ISD::SETULE; NV = U - 1; Ok = U != 0; break;
+      case ISD::SETUGE: NC = ISD::SETUGT; NV = U - 1; Ok = U != 0; break;
+      case ISD::SETULE: NC = ISD::SETULT; NV = U + 1; Ok = U != UINT64_MAX; break;
+      case ISD::SETUGT: NC = ISD::SETUGE; NV = U + 1; Ok = U != UINT64_MAX; break;
+      default: Ok = false;
+      }
+      if (Ok && isInt<8>(NV)) {
+        RHS = DAG.getConstant(NV, DL, MVT::i64);
+        CC = NC;
+      }
+    }
+  }
+  return DAG.getNode(PDP64ISD::SETCC, DL, VT, LHS, RHS, DAG.getTargetConstant(intCC(CC), DL, MVT::i64));
 }
 
 SDValue PDP64TargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
@@ -593,23 +642,32 @@ SDValue PDP64TargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const
   SDValue TV = Op.getOperand(2), FV = Op.getOperand(3);
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(4))->get();
   SDLoc DL(Op);
+  EVT VT = Op.getValueType();
   normalizeCmp(LHS, RHS, CC);
-  unsigned PC = LHS.getValueType().isFloatingPoint() ? fpCC(CC) : intCC(CC);
-  return DAG.getNode(PDP64ISD::SELECT_CC, DL, Op.getValueType(), LHS, RHS,
+  // select of the constants 1 and 0 (or 0 and 1) on an integer compare is the compare itself: one setCC
+  if (VT == MVT::i64 && !LHS.getValueType().isFloatingPoint()) {
+    auto *T = dyn_cast<ConstantSDNode>(TV);
+    auto *F = dyn_cast<ConstantSDNode>(FV);
+    if (T && F && T->isOne() && F->isZero())
+      return makeIntSetCC(DAG, DL, VT, LHS, RHS, CC);
+    if (T && F && T->isZero() && F->isOne())
+      return makeIntSetCC(DAG, DL, VT, LHS, RHS, ISD::getSetCCInverse(CC, LHS.getValueType()));
+  }
+  unsigned PC = compareCC(LHS, RHS, CC);
+  return DAG.getNode(PDP64ISD::SELECT_CC, DL, VT, LHS, RHS,
                      DAG.getTargetConstant(PC, DL, MVT::i64), TV, FV);
 }
 
-// a comparison used as a value: a select of 1 and 0 (a branch diamond)
+// a comparison used as a value: one setCC for integers; for floating point a branch over a constant (the custom inserter of SETF_*)
 SDValue PDP64TargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
   SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(2))->get();
   SDLoc DL(Op);
   EVT VT = Op.getValueType();
-  normalizeCmp(LHS, RHS, CC);
-  unsigned PC = LHS.getValueType().isFloatingPoint() ? fpCC(CC) : intCC(CC);
-  return DAG.getNode(PDP64ISD::SELECT_CC, DL, VT, LHS, RHS,
-                     DAG.getTargetConstant(PC, DL, MVT::i64),
-                     DAG.getConstant(1, DL, VT), DAG.getConstant(0, DL, VT));
+  if (!LHS.getValueType().isFloatingPoint())
+    return makeIntSetCC(DAG, DL, VT, LHS, RHS, CC);
+  unsigned PC = compareCC(LHS, RHS, CC);
+  return DAG.getNode(PDP64ISD::FSETCC, DL, VT, LHS, RHS, DAG.getTargetConstant(PC, DL, MVT::i64));
 }
 
 SDValue PDP64TargetLowering::LowerROT(SDValue Op, SelectionDAG &DAG) const {
@@ -630,6 +688,7 @@ MachineBasicBlock *PDP64TargetLowering::emitSelect(MachineInstr &MI,
   MachineFunction *F = BB->getParent();
   const BasicBlock *LLVM_BB = BB->getBasicBlock();
   MachineFunction::iterator It = ++BB->getIterator();
+  MachineRegisterInfo &MRI = F->getRegInfo();
 
   //  BB:       branch to sink if the condition holds (the value is TV)
   //  copy0:    (falls through; the value is FV)
@@ -646,6 +705,37 @@ MachineBasicBlock *PDP64TargetLowering::emitSelect(MachineInstr &MI,
 
   unsigned Opc = MI.getOpcode();
   Register Rd = MI.getOperand(0).getReg();
+  if (Opc == PDP64::SETF_D || Opc == PDP64::SETF_S) {
+    // rd = (a CC b) ? 1 : 0:  the constant for the taken branch is made in BB, the other in copy0:
+    //     movq #1, t ; fcbCC a, b, sink ; clr f ; sink:      (a condition that needs two branches is negated: clr, fcbCC', movq #1)
+    Register A = MI.getOperand(1).getReg(), B = MI.getOperand(2).getReg();
+    unsigned CC = MI.getOperand(3).getImm();
+    unsigned Taken = 1;
+    if (CC == PDP64CC::FCC_ULT || CC == PDP64CC::FCC_ULE) {
+      bool Swap;
+      CC = PDP64CC::fpInvert((PDP64CC::CondCode)CC, Swap);
+      if (Swap)
+        std::swap(A, B);
+      Taken = 0;
+    }
+    Register T = MRI.createVirtualRegister(&PDP64::GPRRegClass);
+    Register FV = MRI.createVirtualRegister(&PDP64::GPRRegClass);
+    if (Taken)
+      BuildMI(BB, DL, TII.get(PDP64::MOVI), T).addImm(1);
+    else
+      BuildMI(BB, DL, TII.get(PDP64::CLR), T);
+    BuildMI(BB, DL, TII.get(Opc == PDP64::SETF_S ? PDP64::FCB_S : PDP64::FCB_D))
+        .addReg(A).addReg(B).addImm(CC).addMBB(Sink);
+    if (Taken)
+      BuildMI(Copy0, DL, TII.get(PDP64::CLR), FV);
+    else
+      BuildMI(Copy0, DL, TII.get(PDP64::MOVI), FV).addImm(1);
+    BuildMI(*Sink, Sink->begin(), DL, TII.get(PDP64::PHI), Rd)
+        .addReg(FV).addMBB(Copy0)
+        .addReg(T).addMBB(BB);
+    MI.eraseFromParent();
+    return Sink;
+  }
   Register TV = MI.getOperand(4).getReg(), FV = MI.getOperand(5).getReg();
   if (Opc == PDP64::SEL_RR || Opc == PDP64::SEL_RI) {
     BuildMI(BB, DL, TII.get(Opc == PDP64::SEL_RR ? PDP64::CB_rr : PDP64::CB_ri))
@@ -654,11 +744,18 @@ MachineBasicBlock *PDP64TargetLowering::emitSelect(MachineInstr &MI,
         .add(MI.getOperand(3))
         .addMBB(Sink);
   } else {
-    BuildMI(BB, DL, TII.get(Opc == PDP64::SEL_FS ? PDP64::FBR_S : PDP64::FBR_D))
-        .addReg(MI.getOperand(1).getReg())
-        .addReg(MI.getOperand(2).getReg())
-        .add(MI.getOperand(3))
-        .addMBB(Sink);
+    // a floating-point condition of two branches (a<b or unordered, a<=b or unordered) is one branch, negated, with the arms swapped
+    Register A = MI.getOperand(1).getReg(), B = MI.getOperand(2).getReg();
+    unsigned CC = MI.getOperand(3).getImm();
+    if (CC == PDP64CC::FCC_ULT || CC == PDP64CC::FCC_ULE) {
+      bool Swap;
+      CC = PDP64CC::fpInvert((PDP64CC::CondCode)CC, Swap);
+      if (Swap)
+        std::swap(A, B);
+      std::swap(TV, FV);
+    }
+    BuildMI(BB, DL, TII.get(Opc == PDP64::SEL_FS ? PDP64::FCB_S : PDP64::FCB_D))
+        .addReg(A).addReg(B).addImm(CC).addMBB(Sink);
   }
   BuildMI(*Sink, Sink->begin(), DL, TII.get(PDP64::PHI), Rd)
       .addReg(FV).addMBB(Copy0)
@@ -675,6 +772,8 @@ PDP64TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case PDP64::SEL_RI:
   case PDP64::SEL_FD:
   case PDP64::SEL_FS:
+  case PDP64::SETF_D:
+  case PDP64::SETF_S:
     return emitSelect(MI, BB);
   default:
     llvm_unreachable("unexpected instruction for the custom inserter");

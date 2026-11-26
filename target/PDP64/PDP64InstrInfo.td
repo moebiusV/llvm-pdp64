@@ -6,8 +6,8 @@
 // field widths are the variables of gen/PDP64GenLayout.td.
 //
 // Operand order is the assembler's: source first, destination last
-// ("add rs, rd" is rd += rs); "cmp rd, src" is the exception (not used: the
-// back end branches with cbCC, which carries the comparison).
+// ("add rs, rd" is rd += rs).  The machine has no flags: integers are compared by cbCC (branch) and setCC (value), binary floating point by
+// fcbCC (branch; a value is a branch over a constant).
 //
 //===----------------------------------------------------------------------===//
 
@@ -384,6 +384,8 @@ def BR : PI<(outs), (ins brtarget:$dst), !strconcat(MN_br, " $dst"), [(br bb:$ds
 let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in
 def JMPR : PI<(outs), (ins GPR:$rs), !strconcat(MN_jmp, " ($rs)"), [(brind i64:$rs)]>;
 
+def cbri_ok : PatFrag<(ops node:$a, node:$i, node:$cc, node:$d), (pdp64brcc node:$a, node:$i, node:$cc, node:$d),
+    [{ return PDP64CC::cbImmFits(N->getConstantOperandVal(3), cast<ConstantSDNode>(N->getOperand(2))->getSExtValue()); }]>;
 // compare and branch: cbCC ra, rb|#imm, label (the assembler picks the length)
 let isBranch = 1, isTerminator = 1 in {
 def CB_rr : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst),
@@ -391,21 +393,27 @@ def CB_rr : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst),
                [(pdp64brcc i64:$a, i64:$b, (i64 timm:$cc), bb:$dst)]>;
 def CB_ri : PI<(outs), (ins GPR:$a, imm64:$i, ccop:$cc, brtarget:$dst),
                "cb${cc} $a, #$i, $dst",
-               [(pdp64brcc i64:$a, simm16:$i, (i64 timm:$cc), bb:$dst)]>;
-// a branch on the flags (after a floating-point compare)
-def BFLAG : PI<(outs), (ins ccop:$cc, brtarget:$dst), "b${cc} $dst">;  // only in the printer
-// the floating-point compare-and-branch: one instruction here, printed as
-// fcmp + b<cc> by the AsmPrinter (PDP64::fpSequence), so that nothing can be
-// scheduled between the compare and the branch (the flags are not modelled)
-let isCodeGenOnly = 1 in {
-def FBR_D : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst), "# FBR_D",
+               [(cbri_ok i64:$a, simm16:$i, (i64 timm:$cc), bb:$dst)]>;
+// the floating-point compare-and-branch: fcbCC a, b, label (binary64) and fcbCC32 (binary32), two registers.  The condition operand is a
+// PDP64CC floating-point condition: eq ne lt le uo or are one instruction; ult ule ueq one (the unordered-or-X ones and ordered not-equal)
+// are two, written by the AsmPrinter (PDP64CC.h), so the branch analysis sees one conditional branch whose negation is exact
+let isBranch = 1, isTerminator = 1 in {
+def FCB_D : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst), "fcb${cc} $a, $b, $dst",
                [(pdp64brcc f64:$a, f64:$b, (i64 timm:$cc), bb:$dst)]>;
-def FBR_S : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst), "# FBR_S",
+def FCB_S : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst), "fcb${cc}32 $a, $b, $dst",
                [(pdp64brcc f32:$a, f32:$b, (i64 timm:$cc), bb:$dst)]>;
 }
 }
-def FCMP_D : PI<(outs), (ins GPR:$a, GPR:$b), !strconcat(MN_fcmp, " $a, $b")>;
-def FCMP_S : PI<(outs), (ins GPR:$a, GPR:$b), !strconcat(MN_fcmp32, " $a, $b")>;
+
+// compare into a register: setCC ra, rb|#imm8, rd  (rd = 1 if ra CC rb, else 0; the immediate is a signed 8-bit value, sign-extended also
+// for the unsigned conditions)
+def SDT_PDP64SetCC : SDTypeProfile<1, 3, [SDTCisVT<0, i64>, SDTCisSameAs<1, 2>, SDTCisVT<3, i64>]>;
+def pdp64setcc : SDNode<"PDP64ISD::SETCC", SDT_PDP64SetCC>;
+def simm8 : ImmLeaf<i64, [{ return isInt<8>(Imm); }]>;
+def SET_rr : PI<(outs GPR:$rd), (ins GPR:$a, GPR:$b, ccop:$cc), "set${cc} $a, $b, $rd",
+                [(set i64:$rd, (pdp64setcc i64:$a, i64:$b, (i64 timm:$cc)))]>;
+def SET_ri : PI<(outs GPR:$rd), (ins GPR:$a, imm64:$i, ccop:$cc), "set${cc} $a, #$i, $rd",
+                [(set i64:$rd, (pdp64setcc i64:$a, simm8:$i, (i64 timm:$cc)))]>;
 
 // select: a diamond made by the custom inserter
 let usesCustomInserter = 1 in {
@@ -413,11 +421,20 @@ def SEL_RR : PI<(outs GPR:$rd), (ins GPR:$a, GPR:$b, ccop:$cc, GPR:$t, GPR:$f), 
 def SEL_RI : PI<(outs GPR:$rd), (ins GPR:$a, imm64:$i, ccop:$cc, GPR:$t, GPR:$f), "# SEL_RI">;
 def SEL_FD : PI<(outs GPR:$rd), (ins GPR:$a, GPR:$b, ccop:$cc, GPR:$t, GPR:$f), "# SEL_FD">;
 def SEL_FS : PI<(outs GPR:$rd), (ins GPR:$a, GPR:$b, ccop:$cc, GPR:$t, GPR:$f), "# SEL_FS">;
+// a floating-point compare as a value: rd = (a CC b) ? 1 : 0, as  movq #1,rd ; fcbCC a,b,L ; clr rd ; L:
+def SETF_D : PI<(outs GPR:$rd), (ins GPR:$a, GPR:$b, ccop:$cc), "# SETF_D">;
+def SETF_S : PI<(outs GPR:$rd), (ins GPR:$a, GPR:$b, ccop:$cc), "# SETF_S">;
 }
+def SDT_PDP64FSetCC : SDTypeProfile<1, 3, [SDTCisVT<0, i64>, SDTCisFP<1>, SDTCisSameAs<1, 2>, SDTCisVT<3, i64>]>;
+def pdp64fsetcc : SDNode<"PDP64ISD::FSETCC", SDT_PDP64FSetCC>;
+def : Pat<(i64 (pdp64fsetcc f64:$a, f64:$b, (i64 timm:$cc))), (SETF_D $a, $b, timm:$cc)>;
+def : Pat<(i64 (pdp64fsetcc f32:$a, f32:$b, (i64 timm:$cc))), (SETF_S $a, $b, timm:$cc)>;
+def selri_ok : PatFrag<(ops node:$a, node:$i, node:$cc, node:$t, node:$f), (pdp64selcc node:$a, node:$i, node:$cc, node:$t, node:$f),
+    [{ return PDP64CC::cbImmFits(N->getConstantOperandVal(2), cast<ConstantSDNode>(N->getOperand(1))->getSExtValue()); }]>;
 multiclass SelPats<ValueType vt> {
   def : Pat<(vt (pdp64selcc i64:$a, i64:$b, (i64 timm:$cc), vt:$t, vt:$f)),
             (SEL_RR $a, $b, timm:$cc, $t, $f)>;
-  def : Pat<(vt (pdp64selcc i64:$a, simm16:$i, (i64 timm:$cc), vt:$t, vt:$f)),
+  def : Pat<(vt (selri_ok i64:$a, simm16:$i, (i64 timm:$cc), vt:$t, vt:$f)),
             (SEL_RI $a, simm16:$i, timm:$cc, $t, $f)>;
   def : Pat<(vt (pdp64selcc f64:$a, f64:$b, (i64 timm:$cc), vt:$t, vt:$f)),
             (SEL_FD $a, $b, timm:$cc, $t, $f)>;
