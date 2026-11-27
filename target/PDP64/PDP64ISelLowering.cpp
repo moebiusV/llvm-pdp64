@@ -725,7 +725,7 @@ MachineBasicBlock *PDP64TargetLowering::emitSelect(MachineInstr &MI,
   Register Rd = MI.getOperand(0).getReg();
   if (Opc == PDP64::SETF_D || Opc == PDP64::SETF_S) {
     // rd = (a CC b) ? 1 : 0:  the constant for the taken branch is made in BB, the other in copy0:
-    //     movq #1, t ; fcbCC a, b, sink ; clr f ; sink:      (a condition that needs two branches is negated: clr, fcbCC', movq #1)
+    //     mov #1, t ; fcbCC a, b, sink ; clr f ; sink:      (a condition that needs two branches is negated: clr, fcbCC', mov #1)
     Register A = MI.getOperand(1).getReg(), B = MI.getOperand(2).getReg();
     unsigned CC = MI.getOperand(3).getImm();
     unsigned Taken = 1;

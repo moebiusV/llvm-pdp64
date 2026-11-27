@@ -2,8 +2,8 @@
 /* Wave 2: what float to integer does out of range, the rule of the word (vec-isa.md section 7): truncates toward zero and SATURATES; a NaN gives the largest value.  Signed (vcvt.f.l):
    >= 2^31 gives 0x7fffffff, < -2^31 gives 0x80000000, NaN gives 0x7fffffff, -0.0 gives 0.  Unsigned (vcvt.f.lu): <= -1.0 gives 0 (and -0.5, -0.0), NaN and >= 2^32 give 0xffffffff.
    LLVM's fptosi / fptoui are poison out of range, so this is a legal refinement of the IR, and it is also what the scalar instruction does (the three builds agree).  The result is the
-   NUMBER OF LANES THAT DIFFER from the reference below, as b1 * 10^6 + b2 * 10^3 + b3 (expect 0).  The SCALAR build is not the reference: llc's `(int)x` is fcvtsd + fcvtdq (a 64-bit
-   conversion, low 32 bits: wraps out of range) and `scalar:` in the first line is what it gives (255, 30 and 233 lanes; a missed `fcvtsl`).  NOT a host test: x86's cvttss2si gives 0x80000000
+   NUMBER OF LANES THAT DIFFER from the reference below, as b1 * 10^6 + b2 * 10^3 + b3 (expect 0).  The SCALAR build is not the reference: llc's `(int)x` is fcvt.f32.f64 + fcvt.f64.s64 (a 64-bit
+   conversion, low 32 bits: wraps out of range) and `scalar:` in the first line is what it gives (255, 30 and 233 lanes; a missed `fcvt.f32.s32`).  NOT a host test: x86's cvttss2si gives 0x80000000
    for all of these (the host check is expected to disagree). */
 float fa[300];
 int io[300];

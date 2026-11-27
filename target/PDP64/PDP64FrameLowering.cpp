@@ -11,7 +11,7 @@ using namespace llvm;
 
 // A function with nothing in its frame (no locals, no saved registers, no stack
 // arguments, no outgoing arguments, no dynamic allocas) has no frame at all:
-// pcc does the same ("push fp; movq sp,fp" costs six to ten bytes a function).
+// pcc does the same ("push fp; mov sp,fp" costs six to ten bytes a function).
 // The answer can change when the register allocator makes a spill slot; it is
 // asked again before the prologue is emitted.
 bool PDP64FrameLowering::hasFPImpl(const MachineFunction &MF) const {
@@ -21,7 +21,7 @@ bool PDP64FrameLowering::hasFPImpl(const MachineFunction &MF) const {
          MFI.hasStackMap() || MFI.hasPatchPoint();
 }
 
-// The prologue is "push fp; movq sp, fp; sub #n, sp".  The callee-saved
+// The prologue is "push fp; mov sp, fp; sub #n, sp".  The callee-saved
 // registers are stored by the generic code (fp-relative, after the prologue).
 void PDP64FrameLowering::emitPrologue(MachineFunction &MF,
                                       MachineBasicBlock &MBB) const {

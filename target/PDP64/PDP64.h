@@ -36,7 +36,7 @@ inline unsigned pdp64CheckKindOfUbsan(unsigned H) {
 
 // Condition codes.  The integer ones are the cbCC / setCC suffixes of the grammar (generated list).  The floating-point ones name a
 // floating-point compare-and-branch (fcbCC a, b, L: eq ne lt le uo or) or a pair of them; the machine has no flags and no "not less than":
-//   FCC_EQ FCC_NE FCC_LT FCC_LE FCC_UO FCC_OR   one instruction, fcb<cc> (fcb<cc>32 for binary32)
+//   FCC_EQ FCC_NE FCC_LT FCC_LE FCC_UO FCC_OR   one instruction, fcb<cc> (fcb<cc>.f32 for binary32)
 //   FCC_ULT  a<b or unordered       fcbuo a,b,L ; fcblt a,b,L
 //   FCC_ULE  a<=b or unordered      fcbuo a,b,L ; fcble a,b,L
 //   FCC_UEQ  a==b or unordered      fcbuo a,b,L ; fcbeq a,b,L

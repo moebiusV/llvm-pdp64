@@ -1,6 +1,6 @@
 ; expect: -644880463  -- every floating-point predicate on float operands (zeros of both signs, +-1, +-2.5, +-inf, NaN) as the condition of a select of other float values; the machine has no flags: fcbCC and setless value sequences
 ; noasm: ^[[:space:]]+(cmp|tst|bit|adc|sbc|set|fcmp|fcmp32|b(ne|eq|pl|mi|vc|vs|cc|cs|ge|lt|gt|le|hi|los|hos|lo)|bhis)[[:space:]]
-; asm: ^[[:space:]]+fcb(eq|ne|lt|le|uo|or)f[[:space:]]
+; asm: ^[[:space:]]+fcb(eq|ne|lt|le|uo|or)\.f32[[:space:]]
 @sink = global i32 0
 @vals = global [9 x float] [float 0x0000000000000000, float 0x8000000000000000, float 0x3FF0000000000000, float 0xBFF0000000000000, float 0x4004000000000000, float 0xC004000000000000, float 0x7FF0000000000000, float 0xFFF0000000000000, float 0x7FF8000000000000]
 define i32 @p0(float %a, float %b, float %x, float %y) noinline {
