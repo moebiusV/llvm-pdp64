@@ -1,4 +1,4 @@
-; expect: fault  -- a null pointer reaches cteq: the program stops with the check fault (an unconditional llvm.trap too: ctcc r0, #0)
+; expect: fault  -- a null pointer reaches cteq: the program stops with the check fault (an unconditional llvm.trap too: ctcc r0, $0)
 ; asm: cteq r[0-9]+$
 declare void @llvm.ubsantrap(i8 immarg)
 @p = global ptr null

@@ -1,7 +1,7 @@
 ; expect: 136  -- a bounds check (ubsantrap 18, as clang -fsanitize=bounds -fsanitize-trap=bounds writes it): icmp ult + branch to a block that traps -> one ctcc with an immediate bound, no failure block
-; asm: cthi r[0-9]+, #15
+; asm: cthi r[0-9]+, \$15
 ; asm: \.chk	1,
-; noasm: ctcc r0, #0
+; noasm: ctcc r0, \$0
 @a = internal global [16 x i32] [i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15, i32 16]
 declare void @llvm.ubsantrap(i8 immarg)
 

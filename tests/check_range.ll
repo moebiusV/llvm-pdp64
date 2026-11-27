@@ -1,6 +1,6 @@
 ; expect: 7  -- lo <= x && x < hi with llvm.trap on failure -> one chk2 (kind 3, range); the second compare is in its own block
 ; asm: chk2 r[0-9]+, r[0-9]+, r[0-9]+
-; noasm: ctcc r0, #0
+; noasm: ctcc r0, \$0
 declare void @llvm.trap()
 
 define internal i32 @inrange(i32 %x, i32 %lo, i32 %hi) noinline {

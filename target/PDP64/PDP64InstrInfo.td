@@ -107,7 +107,7 @@ def MOVrrA : PI<(outs GPRALL:$rd), (ins GPRALL:$rs), !strconcat(MN_mov, " $rs, $
 }
 
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
-def MOVI : PI<(outs GPR:$rd), (ins imm64:$i), !strconcat(MN_mov, " #$i, $rd"),
+def MOVI : PI<(outs GPR:$rd), (ins imm64:$i), !strconcat(MN_mov, " $$$i, $rd"),
               [(set i64:$rd, simm32:$i)]>;
 // a 64-bit constant from the literal pool (as64 makes the pool)
 def MOVK : PI<(outs GPR:$rd), (ins imm64:$i), !strconcat(MN_mov, " =$i, $rd"),
@@ -137,7 +137,7 @@ multiclass ALU<string mn, SDPatternOperator op, bit comm = 0> {
   let Constraints = "$rd = $rs1" in {
     def rr : PI<(outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2), !strconcat(mn, " $rs2, $rd"),
                 [(set i64:$rd, (op i64:$rs1, i64:$rs2))]> { let isCommutable = comm; }
-    def ri : PI<(outs GPR:$rd), (ins GPR:$rs1, imm64:$imm), !strconcat(mn, " #$imm, $rd"),
+    def ri : PI<(outs GPR:$rd), (ins GPR:$rs1, imm64:$imm), !strconcat(mn, " $$$imm, $rd"),
                 [(set i64:$rd, (op i64:$rs1, simm32:$imm))]>;
   }
 }
@@ -153,7 +153,7 @@ multiclass SHIFT<string mn, SDPatternOperator op> {
   let Constraints = "$rd = $rs1" in {
     def rr : PI<(outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2), !strconcat(mn, " $rs2, $rd"),
                 [(set i64:$rd, (op i64:$rs1, i64:$rs2))]>;
-    def ri : PI<(outs GPR:$rd), (ins GPR:$rs1, imm64:$imm), !strconcat(mn, " #$imm, $rd"),
+    def ri : PI<(outs GPR:$rd), (ins GPR:$rs1, imm64:$imm), !strconcat(mn, " $$$imm, $rd"),
                 [(set i64:$rd, (op i64:$rs1, uimm6:$imm))]>;
   }
 }
@@ -163,7 +163,7 @@ defm SAR : SHIFT<MN_sar, sra>;
 
 // rotates by a constant: ror rs, #n, rd (the same word as the register count; the assembler picks the form, two bytes when rd is rs and the count is -8 to 7 mod 64).  A rotate left is
 // a rotate right by 64 - n: the machine has the one rotate, and rol is only an assembler spelling of it
-def RORI : PI<(outs GPR:$rd), (ins GPR:$rs, imm64:$imm), !strconcat(MN_ror, " $rs, #$imm, $rd"),
+def RORI : PI<(outs GPR:$rd), (ins GPR:$rs, imm64:$imm), !strconcat(MN_ror, " $rs, $$$imm, $rd"),
               [(set i64:$rd, (rotr i64:$rs, uimm6:$imm))]>;
 def : Pat<(rotl i64:$rs, uimm6:$imm), (RORI $rs, (NegShift imm:$imm))>;
 
@@ -358,8 +358,8 @@ def : Pat<(i64 (pdp64wrap tconstpool:$g)), (LEA_S tconstpool:$g)>;
 
 // the stack pointer and the frame pointer (prologue, epilogue, dynamic alloca)
 let Defs = [R14], Uses = [R14] in {
-def ADDSP : PI<(outs), (ins imm64:$i), !strconcat(MN_add, " #$i, sp")>;
-def SUBSP : PI<(outs), (ins imm64:$i), !strconcat(MN_sub, " #$i, sp")>;
+def ADDSP : PI<(outs), (ins imm64:$i), !strconcat(MN_add, " $$$i, sp")>;
+def SUBSP : PI<(outs), (ins imm64:$i), !strconcat(MN_sub, " $$$i, sp")>;
 }
 let Defs = [R14], Uses = [R14, R13] in
 def FPTOSP : PI<(outs), (ins), !strconcat(MN_mov, " fp, sp")>;
@@ -388,7 +388,7 @@ def CB_rr : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, brtarget:$dst),
                "cb${cc} $a, $b, $dst",
                [(pdp64brcc i64:$a, i64:$b, (i64 timm:$cc), bb:$dst)]>;
 def CB_ri : PI<(outs), (ins GPR:$a, imm64:$i, ccop:$cc, brtarget:$dst),
-               "cb${cc} $a, #$i, $dst",
+               "cb${cc} $a, $$$i, $dst",
                [(cbri_ok i64:$a, simm16:$i, (i64 timm:$cc), bb:$dst)]>;
 // the floating-point compare-and-branch: fcbCC a, b, label (binary64) and fcbCC.f32 (binary32), two registers.  The condition operand is a
 // PDP64CC floating-point condition: eq ne lt le uo or are one instruction; ult ule ueq one (the unordered-or-X ones and ordered not-equal)
@@ -413,7 +413,7 @@ def BSEL : PI<(outs GPR:$rd), (ins GPR:$m, GPR:$a, GPR:$b), !strconcat(MN_bsel, 
               [(set i64:$rd, (pdp64bsel i64:$m, i64:$a, i64:$b))]>;
 def SET_rr : PI<(outs GPR:$rd), (ins GPR:$a, GPR:$b, ccop:$cc), "set${cc} $a, $b, $rd",
                 [(set i64:$rd, (pdp64setcc i64:$a, i64:$b, (i64 timm:$cc)))]>;
-def SET_ri : PI<(outs GPR:$rd), (ins GPR:$a, imm64:$i, ccop:$cc), "set${cc} $a, #$i, $rd",
+def SET_ri : PI<(outs GPR:$rd), (ins GPR:$a, imm64:$i, ccop:$cc), "set${cc} $a, $$$i, $rd",
                 [(set i64:$rd, (pdp64setcc i64:$a, simm8:$i, (i64 timm:$cc)))]>;
 
 // select: a diamond made by the custom inserter
@@ -481,9 +481,9 @@ def CheckKindXF : SDNodeXForm<timm, [{
 let hasSideEffects = 1 in {
 // an unconditional trap: ctcc of anything against zero (every unsigned value is higher than or the same as 0)
 let isBarrier = 1, isTerminator = 1 in
-def TRAPCHK : PI<(outs), (ins imm64:$kind), !strconcat(MN_ctcc, " r0, #0")>;
+def TRAPCHK : PI<(outs), (ins imm64:$kind), !strconcat(MN_ctcc, " r0, $$0")>;
 def CT_rr : PI<(outs), (ins GPR:$a, GPR:$b, ccop:$cc, imm64:$kind), "ct${cc} $a, $b">;
-def CT_ri : PI<(outs), (ins GPR:$a, imm64:$i, ccop:$cc, imm64:$kind), "ct${cc} $a, #$i">;
+def CT_ri : PI<(outs), (ins GPR:$a, imm64:$i, ccop:$cc, imm64:$kind), "ct${cc} $a, $$$i">;
 def CT_z  : PI<(outs), (ins GPR:$a, ccop:$cc, imm64:$kind), "ct${cc} $a">;
 def CHK2  : PI<(outs), (ins GPR:$a, GPR:$lo, GPR:$hi, imm64:$kind), !strconcat(MN_chk2, " $a, $lo, $hi")>;
 }
@@ -511,7 +511,7 @@ defm FSUB_S : FALU<MN_fsub_f32, "", f32, fsub>;
 defm FMUL_S : FALU<MN_fmul_f32, "", f32, fmul, 1>;
 defm FDIV_S : FALU<MN_fdiv_f32, "", f32, fdiv>;
 
-// the conversions are one word each: fcvt.SOURCE.DESTINATION, the format of the source and then of the destination
+// the conversions state the format on each operand, the source first (fcvt r1.f64, r2.f32); an integer to a float of the same size is printed with the integer suffix alone (fcvt.s64, fcvt.u64, fcvt.s32).  The mnemonic and the marks of each word are generated (CV_<word of the encoding>_mn, _src, _dst in gen/PDP64GenMnemonics.td, from the rows of map-marks)
 multiclass FUN<string mn, string ms, string md, ValueType dt, ValueType st, SDPatternOperator op> {
   def NAME : PI<(outs GPR:$rd), (ins GPR:$rs), !strconcat(mn, " $rs", ms, ", $rd", md),
                 [(set dt:$rd, (op st:$rs))]>;
@@ -520,12 +520,12 @@ defm FSQRT_D : FUN<MN_fsqrt, "", "", f64, f64, fsqrt>;
 defm FSQRT_S : FUN<MN_fsqrt_f32, "", "", f32, f32, fsqrt>;
 defm FNEG_D : FUN<MN_fneg, "", "", f64, f64, fneg>;
 defm FABS_D : FUN<MN_fabs, "", "", f64, f64, fabs>;
-defm FCVT_SD : FUN<MN_fcvt_f32_f64, "", "", f64, f32, fpextend>;
-defm FCVT_DS : FUN<MN_fcvt_f64_f32, "", "", f32, f64, fpround>;
-defm FCVT_QD : FUN<MN_fcvt_s64_f64, "", "", f64, i64, sint_to_fp>;
-defm FCVT_DQ : FUN<MN_fcvt_f64_s64, "", "", i64, f64, fp_to_sint>;
-defm FCVT_QUD : FUN<MN_fcvt_u64_f64, "", "", f64, i64, uint_to_fp>;
-defm FCVT_DQU : FUN<MN_fcvt_f64_u64, "", "", i64, f64, fp_to_uint>;
+defm FCVT_SD : FUN<CV_fcvtsd_mn, CV_fcvtsd_src, CV_fcvtsd_dst, f64, f32, fpextend>;
+defm FCVT_DS : FUN<CV_fcvtds_mn, CV_fcvtds_src, CV_fcvtds_dst, f32, f64, fpround>;
+defm FCVT_QD : FUN<CV_fcvtqd_mn, CV_fcvtqd_src, CV_fcvtqd_dst, f64, i64, sint_to_fp>;
+defm FCVT_DQ : FUN<CV_fcvtdq_mn, CV_fcvtdq_src, CV_fcvtdq_dst, i64, f64, fp_to_sint>;
+defm FCVT_QUD : FUN<CV_fcvtqud_mn, CV_fcvtqud_src, CV_fcvtqud_dst, f64, i64, uint_to_fp>;
+defm FCVT_DQU : FUN<CV_fcvtdqu_mn, CV_fcvtdqu_src, CV_fcvtdqu_dst, i64, f64, fp_to_uint>;
 
 // binary32 negate and absolute value on the sign-extended bits
 def : Pat<(f32 (fneg f32:$a)), (f32 (XORri $a, -2147483648))>;

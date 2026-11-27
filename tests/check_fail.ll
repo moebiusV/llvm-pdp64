@@ -1,5 +1,5 @@
 ; expect: fault  -- the check FAILS (index 16 of 16): the program stops with the fault of vector 16 (sim64 without -K: the message "check failed" and exit status 139)
-; asm: cthi r[0-9]+, #15
+; asm: cthi r[0-9]+, \$15
 @a = internal global [16 x i32] zeroinitializer
 declare void @llvm.ubsantrap(i8 immarg)
 @idx = global i64 16

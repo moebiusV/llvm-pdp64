@@ -1,6 +1,6 @@
 ; expect: 10  -- a bounds check against a length in a register (ctcc rs, rb), the trap arm falling through (the condition is inverted), and an immediate too wide for the 12 bits of the immediate form (5000: loaded into a register first)
 ; asm: cthi r[0-9]+, r[0-9]+|ctcc r[0-9]+, r[0-9]+
-; asm: mov #4999, r[0-9]+
+; asm: mov \$4999, r[0-9]+
 ; asm: \.chk	1,
 @a = internal global [8 x i32] [i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 0, i32 0]
 declare void @llvm.ubsantrap(i8 immarg)

@@ -57,9 +57,6 @@ Static uses in the blocks of each build; "words used" and "functions" are for th
 | multiply-add | `vfma` | 2 | 2 | 38 | 33 | 10 | k_cmul, k_daxpy, k_dgemv_t, k_dger, k_fmac, k_saxpy ... |
 | multiply-add | `vfnma` | 2 | 1 | 2 | 2 | 1 | k_cmul |
 | multiply-add | `vfmab` | 2 | 0 | 0 | 0 | 0 | **none: a dud for this compiler** |
-| dot | `vdot` | 2 | 0 | 0 | 0 | 0 | **none: a dud for this compiler** |
-| dot | `vdotu` | 1 | 0 | 0 | 0 | 0 | **none: a dud for this compiler** |
-| dot | `vdotsu` | 1 | 0 | 0 | 0 | 0 | **none: a dud for this compiler** |
 | dot | `vdacc` | 4 | 4 | 15 | 15 | 12 | dot16, dot8, dot8su, dot8u, k_dot16, k_dot16l ... |
 | dot | `vsad` | 1 | 1 | 6 | 6 | 4 | k_sad, k_sad2, k_sadrow, sad |
 | table lookup | `vtbl` | 1 | 0 | 0 | 0 | 0 | **none: a dud for this compiler** |
@@ -212,9 +209,9 @@ Used by LoopVectorize's build and not by the scalar recogniser: `vlseg2`, `vlseg
 
 ## Words of the grammar that no kernel uses
 
-239 of the 365 words of the family are not used by either build (126 used). By base mnemonic (words unused / words in the grammar):
+235 of the 361 words of the family are not used by either build (126 used). By base mnemonic (words unused / words in the grammar):
 
-`vabd` 2/3, `vabdu` 2/2, `vacc` 7/12, `vadd` 1/6, `vadds` 2/3, `vaddsu` 2/3, `vand` 3/4, `vavg` 0/2, `vavgu` 0/2, `vbsl` 0/1, `vceq` 1/4, `vcgt` 0/4, `vcgtu` 0/3, `vclr` 3/3, `vcvt` 0/4, `vdacc` 0/4, `vdot` 2/2, `vdotsu` 1/1, `vdotu` 1/1, `vec` 0/1, `vec2` 1/1, `vend` 0/1, `vfin` 1/1, `vfir` 3/3, `vfma` 0/2, `vfmab` 2/2, `vfnma` 1/2, `vld` 10/22, `vldt` 19/22, `vlseg2` 20/22, `vlseg3` 22/22, `vlseg4` 21/22, `vmax` 3/5, `vmaxacc` 7/9, `vmaxu` 2/3, `vmin` 2/5, `vminacc` 7/9, `vminu` 2/3, `vmla` 0/2, `vmov` 1/6, `vmul` 0/5, `vmulh` 0/1, `vmulhr` 0/1, `vmulhu` 0/1, `vneg` 5/6, `vor` 2/4, `vsad` 0/1, `vsar` 3/4, `vsarr` 0/2, `vshl` 2/4, `vshr` 3/4, `vshrr` 1/2, `vskip` 1/1, `vsseg2` 11/13, `vsseg3` 12/13, `vsseg4` 12/13, `vst` 4/13, `vsts` 9/12, `vstt` 10/13, `vsub` 1/6, `vsubr` 5/6, `vsubs` 2/3, `vsubsu` 2/3, `vtbl` 1/1, `vxor` 2/4
+`vabd` 2/3, `vabdu` 2/2, `vacc` 7/12, `vadd` 1/6, `vadds` 2/3, `vaddsu` 2/3, `vand` 3/4, `vavg` 0/2, `vavgu` 0/2, `vbsl` 0/1, `vceq` 1/4, `vcgt` 0/4, `vcgtu` 0/3, `vclr` 3/3, `vcvt` 0/4, `vdacc` 0/4, `vec` 0/1, `vec2` 1/1, `vend` 0/1, `vfin` 1/1, `vfir` 3/3, `vfma` 0/2, `vfmab` 2/2, `vfnma` 1/2, `vld` 10/22, `vldt` 19/22, `vlseg2` 20/22, `vlseg3` 22/22, `vlseg4` 21/22, `vmax` 3/5, `vmaxacc` 7/9, `vmaxu` 2/3, `vmin` 2/5, `vminacc` 7/9, `vminu` 2/3, `vmla` 0/2, `vmov` 1/6, `vmul` 0/5, `vmulh` 0/1, `vmulhr` 0/1, `vmulhu` 0/1, `vneg` 5/6, `vor` 2/4, `vsad` 0/1, `vsar` 3/4, `vsarr` 0/2, `vshl` 2/4, `vshr` 3/4, `vshrr` 1/2, `vskip` 1/1, `vsseg2` 11/13, `vsseg3` 12/13, `vsseg4` 12/13, `vst` 4/13, `vsts` 9/12, `vstt` 10/13, `vsub` 1/6, `vsubr` 5/6, `vsubs` 2/3, `vsubsu` 2/3, `vtbl` 1/1, `vxor` 2/4
 
 
 ## Instructions no kernel used, and why (what a compiler would need)
@@ -225,9 +222,6 @@ Used by LoopVectorize's build and not by the scalar recogniser: `vlseg2`, `vlseg
 * `vlseg3` (segment, 22 words): a three-field load group (rgb to planes): no kernel of the set has one
 * `vabdu` (lane operations, 2 words): the kernels take `abs(a - b)` of widened bytes: the signed `vabd` serves (and `vsad.bu` for a sum of them)
 * `vfmab` (multiply-add, 2 words): the broadcast multiply-add of a GEMM micro-kernel: needs a loop nest, not an innermost loop
-* `vdot` (dot, 2 words): subsumed: a dot product (k_q8dot) is a reduction, and `vdacc.b` / `vdacc.w` sum a whole strip into the scalar register in ONE instruction, which `vdot` followed by `vacc` cannot beat; `vdot` writes 32-bit lanes of a vector and so keeps the strip at 8 lanes; LLVM would reach it only as a partial reduction (`llvm.vector.partial.reduce.add`, a vector accumulator that lives across strips: the block model has none)
-* `vdotu` (dot, 1 words): same
-* `vdotsu` (dot, 1 words): same
 * `vtbl` (table lookup, 1 words): a 16-byte table lookup is a gather (`c[i] = tbl[a[i] & 15]`) in IR and LoopVectorize refuses it (memory conflicts, no masked gather); there is no intrinsic: assembly only
 * `vfir` (sliding window, 3 words): a window of consecutive loads times invariant taps (put8h): LoopVectorize does not vectorise it (too many live vectors), the scalar recogniser makes eight shifted streams; neither makes `vfir`
 * `vclr` (accumulators, 3 words): hidden accumulation across strips: nothing reads an accumulator after the block ends (there is no vector-to-scalar move outside a block), so a block that needs one reduces inside it (`vacc` each strip), which is what both compilers do

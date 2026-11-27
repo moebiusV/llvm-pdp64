@@ -122,10 +122,6 @@ constexpr unsigned Hot4[16] = {0, 1, 8, 2, 14, 3, 9, 10, 11, 4, 15, 5, 24, 25, 2
   X("vdacc.bsu") \
   X("vdacc.bu") \
   X("vdacc.w") \
-  X("vdot.b") \
-  X("vdot.w") \
-  X("vdotsu.b") \
-  X("vdotu.b") \
   X("vec") \
   X("vec2") \
   X("vend") \

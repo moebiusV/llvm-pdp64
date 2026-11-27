@@ -2056,7 +2056,7 @@ bool PDP64VecLoop::transform(Loop *L, ScalarEvolution &SE, LoopInfo &LI, Dominat
   auto Src = [&](Opnd &O) -> std::string {
     if (O.Kind == Opnd::V) return Rn(O.Id);
     if (O.Kind == Opnd::S) return ScalOp(O.Id);
-    return ("#" + Twine(O.Imm)).str();
+    return ("$$" + Twine(O.Imm)).str();
   };
   for (unsigned i = 0; i < A.Prog.size(); ++i) {
     VOp &Op = A.Prog[i];
@@ -2067,13 +2067,13 @@ bool PDP64VecLoop::transform(Loop *L, ScalarEvolution &SE, LoopInfo &LI, Dominat
       if (D < 0) { Say("not a vec block: more than 16 vector registers"); return false; }
       Reg[Op.Dst] = D;
       Stream &S = A.Streams[Op.Stream];
-      T = Op.Mn + Rn(Op.Dst) + ", " + (S.LastUse == (int)i ? "(" + PtrOp(Op.Stream) + ")+" : "0(" + PtrOp(Op.Stream) + ")") + (Op.Stride ? ", #" + std::to_string(Op.Stride) : "");
+      T = Op.Mn + Rn(Op.Dst) + ", " + (S.LastUse == (int)i ? "(" + PtrOp(Op.Stream) + ")+" : "0(" + PtrOp(Op.Stream) + ")") + (Op.Stride ? ", $$" + std::to_string(Op.Stride) : "");
       break;
     }
     case VOp::Store: {
       Stream &S = A.Streams[Op.Stream];
-      T = Op.Mn + Rn(Op.A.Id) + ", " + (S.LastUse == (int)i ? "(" + PtrOp(Op.Stream) + ")+" : "0(" + PtrOp(Op.Stream) + ")") + (Op.Stride ? ", #" + std::to_string(Op.Stride) : "") +
-          (Op.Sh >= 0 ? ", #" + std::to_string(Op.Sh) : "");
+      T = Op.Mn + Rn(Op.A.Id) + ", " + (S.LastUse == (int)i ? "(" + PtrOp(Op.Stream) + ")+" : "0(" + PtrOp(Op.Stream) + ")") + (Op.Stride ? ", $$" + std::to_string(Op.Stride) : "") +
+          (Op.Sh >= 0 ? ", $$" + std::to_string(Op.Sh) : "");
       ReleaseDead(i, Op.A.Id);
       break;
     }
